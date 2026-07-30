@@ -1,5 +1,3 @@
-Berikut adalah berkas **README.md** yang telah dirapikan sepenuhnya dengan format Markdown yang konsisten, bersih, serta tautan (URL) pendaftaran yang aktif dan dapat langsung diklik (*clickable*).
-```markdown
 # 🚀 REST API Base Dashboard
 
 <div align="center">
