@@ -2,7 +2,7 @@
 
 <div align="center">
 
-<img src="https://readme-typing-svg.demolab.com?font=Poppins&weight=700&size=28&pause=1000&color=00D4FF&center=true&vCenter=true&width=600&lines=Welcome+To+REST+API+Base;Fast+🚀+Reliable+⚡;Free+REST+API+Services;Developer+Friendly+API" alt="Typing SVG"/>
+<img src="https://readme-typing-svg.demolab.com?font=Poppins&weight=700&size=28&pause=1000&color=00D4FF&center=true&vCenter=true&width=600&lines=Welcome+To+REST+API+Base;Fast+%F0%9F%9A%80+Reliable+%E2%9A%A1;Free+REST+API+Services;Developer+Friendly+API" alt="Typing SVG" />
 
 <br>
 
@@ -76,7 +76,6 @@ API Engine:
 │   └── ...
 │
 ├── database/
-│   ├── linkbio.json
 │   ├── notifikasi.js
 │   ├── playlist.js
 │   ├── PREMIUM_USERS.js
@@ -85,11 +84,11 @@ API Engine:
 ├── public/
 │   ├── home.html
 │   ├── login.html
-│   ├── uploader.html
-│   └── styles.css
+│   └── uploader.html
 │
 ├── index.js
 ├── script.js
+├── styles.css
 ├── package.json
 └── README.md
 
