@@ -1,5 +1,5 @@
 export default async function handler(req, res) {
-    const imageUrl = "https://arulz-uploader.vercel.app/files/CVmlrD.jpg";
+    const imageUrl = "https://arulz-uploader.vercel.app/files/CVmlrD.jpg"; //your qris image
 
     try {
         // Server Vercel nge-fetch gambar (bebas CORS karena server-to-server)

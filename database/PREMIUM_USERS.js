@@ -1,6 +1,6 @@
 const PREMIUM_USERS = [
-    "arulzz.xd",
-    "Laras"
+    "username_premium", // masukin username yang mau menjadi user premium
+    "username_premium" // masukin username yang mau menjadi user premium
 ];
 
 module.exports = PREMIUM_USERS;

@@ -2,14 +2,13 @@
   {
     "nama": "Premium API Key (1 Bulan Access)",
     "harga": 35000,
-    "harga_diskon": 1000,
+    "harga_diskon": 25000,
     "kategori": "Layanan API",
     "badge": "Terlaris",
     "terjual": 1420,
     "stok": 50,
     "gambar": "https://arulz-xd.my.id/files/X1F0Cn.png",
-    "deskripsi": "Akses penuh ke semua fitur API premium selama 30 hari dengan kuota harian tanpa batas dan respons server super cepat.",
-    "link": "https://arulz-xd.my.id/files/X1F0Cn.png"
+    "deskripsi": "Akses penuh ke semua fitur API premium selama 30 hari dengan kuota harian tanpa batas dan respons server super cepat."
   },
   {
     "nama": "Source Code Bot WhatsApp Multi-Device V2",
@@ -20,8 +19,7 @@
     "terjual": 850,
     "stok": 15,
     "gambar": "https://arulz-xd.my.id/files/K4Sf61.png",
-    "deskripsi": "Source code bot WhatsApp stabil berbasis Baileys multi-device. Mudah dikonfigurasi dan dilengkapi fitur otomatisasi mutakhir.",
-    "link": "https://arulz-xd.my.id/files/X1F0Cn.png"
+    "deskripsi": "Source code bot WhatsApp stabil berbasis Baileys multi-device. Mudah dikonfigurasi dan dilengkapi fitur otomatisasi mutakhir."
   },
   {
     "nama": "Hosting Node.js Instan",
