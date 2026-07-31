@@ -1,11 +1,8 @@
+require('dotenv').config();
+
 const express = require('express');
 const fileUpload = require('express-fileupload');
 const session = require('express-session');
-const mongoose = require('mongoose');
-const { MongoStore } = require('connect-mongo');
-const passport = require('passport');
-const LocalStrategy = require('passport-local').Strategy;
-const bcrypt = require('bcrypt');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const jwt = require('jsonwebtoken');
@@ -20,493 +17,44 @@ const crypto = require('crypto');
 const compression = require('compression');
 const os = require('os');
 
+// === TAMBAHAN IMPORT DEPENDENSI YANG KURANG ===
+const mongoose = require('mongoose');
+const passport = require('passport');
+const LocalStrategy = require('passport-local').Strategy;
+const bcrypt = require('bcrypt');
+
 const app = express();
-app.set('etag', false);
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT;
 app.use(express.static(path.join(__dirname)));
-app.use(express.json({
-    verify: (req, res, buf) => {
-        req.rawBody = buf.toString('utf8');
-    }
-}));
+app.use(express.json());
 app.use(cookieParser());
 app.set('trust proxy', 1);
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://arulz-xd-owner:Haqqi0213@cluster0.fgxhxqm.mongodb.net/?appName=Cluster0'; 
+const MONGODB_URI = process.env.MONGODB_URI; 
 
 mongoose.connect(MONGODB_URI)
     .then(() => console.log('📦 Berhasil terhubung ke MongoDB!'))
     .catch(err => console.error('❌ Gagal koneksi ke MongoDB:', err));
 
-app.use(session({
-    secret: 'arulzxd_secret_session_key_99', 
-    resave: false,
-    saveUninitialized: false,
-    store: MongoStore.create({
-        mongoUrl: MONGODB_URI,
-        dbName: 'sessions',
-        ttl: 24 * 60 * 60
-    }),
-    cookie: { maxAge: 24 * 60 * 60 * 1000 } 
-}));
-const PAYWUZ_API_KEY = process.env.PAYWUZ_API_KEY || "pk_live_f1429e9285d76999cc3f8bb6c3df552f";
-const PAYWUZ_BASE_URL = "https://api.paywuz.id/v1";
-const PAYWUZ_HEADERS = {
-    "Authorization": `Bearer ${PAYWUZ_API_KEY}`,
-    "Content-Type": "application/json"
-};
-
-async function axiosPaywuzWithRetry(config, maxRetries = 3, delayMs = 1500) {
-    for (let i = 0; i < maxRetries; i++) {
-        try {
-            return await axios(config);
-        } catch (error) {
-            const isRateLimited = error.response && error.response.status === 429;
-            const isLastAttempt = i === maxRetries - 1;
-
-            if (isRateLimited && !isLastAttempt) {
-                console.warn(`⚠️ Menerima 429 dari PayWuz. Retry ke-${i + 1} dalam ${delayMs}ms...`);
-                await new Promise(resolve => setTimeout(resolve, delayMs));
-                delayMs *= 1.5; // Backoff bertambah
-            } else {
-                throw error;
-            }
-        }
-    }
-}
-
-const cacheSchema = new mongoose.Schema({
-    key: { type: String, required: true, unique: true },
-    data: { type: mongoose.Schema.Types.Mixed, required: true },
-    createdAt: { type: Date, default: Date.now, expires: 60 } // Hapus otomatis setelah 60 detik
-});
-
-const CacheModel = mongoose.models.Cache || mongoose.model('Cache', cacheSchema);
-
-async function getCache(key) {
-    try {
-        const doc = await CacheModel.findOne({ key });
-        return doc ? doc.data : null;
-    } catch (e) {
-        return null;
-    }
-}
-
-async function setCache(key, data) {
-    try {
-        await CacheModel.findOneAndUpdate(
-            { key },
-            { data, createdAt: new Date() },
-            { upsert: true, new: true }
-        );
-    } catch (e) {
-        console.error("Gagal simpan cache MongoDB:", e.message);
-    }
-}
-
-async function deleteCache(key) {
-    try {
-        await CacheModel.deleteOne({ key });
-    } catch (e) {}
-}
-
-function scheduleTransactionDeletion(orderId) {
-    setTimeout(async () => {
-        try {
-            await Transaction.deleteOne({ orderId });
-            await deleteCache(`trx_${orderId}`);
-            console.log(`🗑️ Transaksi ${orderId} berhasil dihapus dari database.`);
-        } catch (err) {
-            console.error(`❌ Gagal menghapus transaksi ${orderId}:`, err.message);
-        }
-    }, 60 * 1000);
-}
-
-mongoose.connection.once('open', async () => {
-    try {
-        await mongoose.connection.db.collection('transactions').dropIndex('transactionId_1');
-        console.log('🧹 Berhasil menghapus index lama transactionId_1');
-    } catch (e) {}
-});
-
-const transactionSchema = new mongoose.Schema({
-    orderId: { type: String, required: true, unique: true },
-    amount: { type: Number, required: true },
-    paymentNumber: { type: String, default: null }, // QRIS String / URL
-    paymentMethod: { type: String, default: "QRIS" },
-    status: { type: String, default: "pending" }, // pending, settlement, paid, success, failed, cancelled
-    itemDetails: {
-        nama: String,
-        harga: Number,
-        harga_diskon: Number,
-        kategori: String,
-        gambar: String,
-        link: String
-    },
-    productLink: { type: String, default: null },
-    createdAt: { type: Date, default: Date.now },
-    expiredAt: { type: Date, required: true },
-    updatedAt: { type: Date, default: Date.now }
-});
-
-const Transaction = mongoose.models.Transaction || mongoose.model('Transaction', transactionSchema);
-
-function verifyPaywuzSignature(rawBody, receivedSignature, apiKey) {
-    if (!receivedSignature) return false;
-
-    const computedSignature = "sha256=" + crypto
-        .createHmac("sha256", apiKey)
-        .update(typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody))
-        .digest("hex");
-
-    try {
-        return crypto.timingSafeEqual(
-            Buffer.from(receivedSignature),
-            Buffer.from(computedSignature)
-        );
-    } catch (err) {
-        return false;
-    }
-}
-
-// ==========================================
-// 1. POST /transactions (CREATE TRANSACTION)
-// ==========================================
-app.post('/transactions', async (req, res) => {
-    try {
-        const { orderId, amount, itemDetails } = req.body;
-
-        if (!orderId || !amount) {
-            return res.status(400).json({ 
-                status: false,
-                error: "INVALID_PAYLOAD", 
-                message: "orderId dan amount wajib diisi!" 
-            });
-        }
-
-        // --- IDEMPOTENSI: Jika orderId sudah ada, kembalikan data eksis ---
-        const existingTrx = await Transaction.findOne({ orderId });
-        if (existingTrx) {
-            return res.json({
-                status: true,
-                data: existingTrx
-            });
-        }
-
-        const inputAmount = Number(amount);
-
-        // Request ke PayWuz API menggunakan helper retry dengan backoff
-        const paywuzRes = await axiosPaywuzWithRetry({
-            method: 'post',
-            url: `${PAYWUZ_BASE_URL}/transactions`,
-            data: {
-                orderId,
-                amount: inputAmount,
-                paymentMethod: "QRIS",
-                feeByMerchant: false
-            },
-            headers: PAYWUZ_HEADERS
-        });
-
-        const transactionData = paywuzRes.data?.data || paywuzRes.data;
-        const qrisNumber = transactionData.paymentNumber || transactionData.qrString || transactionData.qrUrl;
-
-        const safeNum = (val) => {
-            const num = Number(val);
-            return (!isNaN(num) && num > 0) ? num : null;
-        };
-
-        const feeFlatIdr = Number(transactionData.feeFlatIdr) || 290;
-        const feePercentBps = Number(transactionData.feePercentBps) || 70;
-        const calculatedFee = feeFlatIdr + Math.ceil((inputAmount * feePercentBps) / 10000);
-
-        let finalAmount = safeNum(transactionData.grossAmount) || 
-                          safeNum(transactionData.totalAmount) || 
-                          safeNum(transactionData.total);
-
-        if (!finalAmount) {
-            const feeVal = safeNum(transactionData.fee) || safeNum(transactionData.feeAdmin) || calculatedFee;
-            finalAmount = inputAmount + feeVal;
-        }
-
-        let pLink = itemDetails?.link || null;
-        if (!pLink && itemDetails?.nama) {
-            const pathProduk = path.join(__dirname, 'database', 'produk.json');
-            if (fs.existsSync(pathProduk)) {
-                const products = JSON.parse(fs.readFileSync(pathProduk, 'utf8'));
-                const matchedProduct = products.find(p => p.nama === itemDetails.nama);
-                if (matchedProduct) pLink = matchedProduct.link || null;
-            }
-        }
-
-        const expiredAt = new Date(Date.now() + 15 * 60 * 1000);
-
-        const newTransaction = new Transaction({
-            orderId,
-            amount: finalAmount,
-            paymentNumber: qrisNumber,
-            paymentMethod: "QRIS",
-            status: (transactionData.status || "pending").toLowerCase(),
-            itemDetails: itemDetails || null,
-            productLink: pLink,
-            expiredAt: expiredAt
-        });
-
-        await newTransaction.save();
-
-        // FIX: Tambahkan properti 'status: true' agar terbaca sukses oleh Frontend
-        return res.json({
-            status: true,
-            data: newTransaction
-        });
-
-    } catch (error) {
-        console.error("Error Create TRX:", error.response?.data || error.message);
-        return res.status(500).json({
-            status: false,
-            error: "CREATE_TRANSACTION_FAILED",
-            message: error.response?.data?.message || error.message || "Gagal membuat transaksi QRIS"
-        });
-    }
-});
-
-// ==========================================
-// 2. GET /transactions/:orderId (CHECK STATUS WITH CACHE)
-// ==========================================
-app.get('/transactions/:orderId', async (req, res) => {
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-
-    try {
-        const { orderId } = req.params;
-
-        // 1. Ambil dari MongoDB Cache terlebih dahulu (Cache-First Pattern)
-        const cachedData = await getCache(`trx_${orderId}`);
-        if (cachedData) {
-            return res.json({ data: cachedData });
-        }
-
-        // 2. Jika tidak ada di Cache, baca dari MongoDB Database
-        let localTrx = await Transaction.findOne({ orderId });
-
-        if (!localTrx) {
-            return res.status(404).json({ 
-                error: "TRANSACTION_NOT_FOUND", 
-                message: "Transaksi tidak ditemukan" 
-            });
-        }
-
-        // Cek kedaluwarsa waktu transaksi
-        if (localTrx.status.toLowerCase() === "pending" && new Date() > new Date(localTrx.expiredAt)) {
-            localTrx.status = "cancelled";
-            localTrx.updatedAt = new Date();
-            await localTrx.save();
-            scheduleTransactionDeletion(orderId);
-
-            const resultData = {
-                orderId: localTrx.orderId,
-                status: "cancelled",
-                amount: localTrx.amount,
-                paymentNumber: localTrx.paymentNumber,
-                expiredAt: localTrx.expiredAt,
-                productLink: null
-            };
-
-            await setCache(`trx_${orderId}`, resultData);
-            return res.json({ data: resultData });
-        }
-
-        const currentStatus = localTrx.status.toLowerCase();
-        const isSuccess = ["settlement", "success", "paid", "settled"].includes(currentStatus);
-
-        // Pencocokan Link Produk
-        if (isSuccess && !localTrx.productLink && localTrx.itemDetails?.nama) {
-            const pathProduk = path.join(__dirname, 'database', 'produk.json');
-            if (fs.existsSync(pathProduk)) {
-                try {
-                    const products = JSON.parse(fs.readFileSync(pathProduk, 'utf8'));
-                    const targetNama = localTrx.itemDetails.nama.trim().toLowerCase();
-                    const matchedProduct = products.find(p => p.nama && p.nama.trim().toLowerCase() === targetNama);
-                    if (matchedProduct && matchedProduct.link) {
-                        localTrx.productLink = matchedProduct.link;
-                        await localTrx.save();
-                    }
-                } catch (parseErr) {}
-            }
-        }
-
-        const responseData = {
-            orderId: localTrx.orderId,
-            status: currentStatus,
-            amount: localTrx.amount,
-            paymentNumber: localTrx.paymentNumber,
-            expiredAt: localTrx.expiredAt,
-            productLink: isSuccess ? localTrx.productLink : null
-        };
-
-        // Simpan hasil ke Cache MongoDB
-        await setCache(`trx_${orderId}`, responseData);
-
-        // Standard Success Response Envelope
-        res.json({
-            data: responseData
-        });
-
-    } catch (error) {
-        console.error("Error Status TRX:", error.message);
-        const localTrx = await Transaction.findOne({ orderId: req.params.orderId });
-        if (localTrx) {
-            return res.json({ data: localTrx });
-        }
-        res.status(500).json({ 
-            error: "TRANSACTION_FETCH_FAILED", 
-            message: "Gagal mengambil status transaksi" 
-        });
-    }
-});
-
-// ==========================================
-// 3. POST /transactions/:orderId/cancel (CANCEL TRANSACTION)
-// ==========================================
-app.post('/transactions/:orderId/cancel', async (req, res) => {
-    try {
-        const { orderId } = req.params;
-
-        const cancelRes = await axiosPaywuzWithRetry({
-            method: 'post',
-            url: `${PAYWUZ_BASE_URL}/transactions/${orderId}/cancel`,
-            headers: PAYWUZ_HEADERS
-        });
-
-        await Transaction.findOneAndUpdate(
-            { orderId },
-            { status: "cancelled", updatedAt: new Date() }
-        );
-
-        await deleteCache(`trx_${orderId}`);
-        scheduleTransactionDeletion(orderId);
-
-        res.json({
-            data: cancelRes.data?.data || cancelRes.data || { orderId, status: "cancelled" }
-        });
-
-    } catch (error) {
-        console.error("Error Cancel TRX:", error.response?.data || error.message);
-        res.status(500).json({
-            error: "CANCEL_TRANSACTION_FAILED",
-            message: error.response?.data?.message || error.message || "Gagal membatalkan transaksi"
-        });
-    }
-});
-
-// ==========================================
-// 4. POST /webhook (RECEIVE PAYWUZ EVENT)
-// ==========================================
-app.post('/webhook', async (req, res) => {
-    try {
-        const signature = req.headers['x-paywuz-signature'];
-
-        // Gunakan req.rawBody jika ada, atau fallback ke req.body jika kosong
-        const payloadToVerify = req.rawBody || req.body;
-
-        // Verifikasi Signature
-        const isValid = verifyPaywuzSignature(payloadToVerify, signature, PAYWUZ_API_KEY);
-
-        if (!isValid) {
-            console.warn("⚠️ Signature Webhook tidak valid atau tidak cocok!");
-            if (process.env.NODE_ENV === 'production') {
-                return res.status(401).json({ 
-                    error: "INVALID_SIGNATURE", 
-                    message: "Signature webhook tidak valid!" 
-                });
-            }
-        }
-
-        const payload = req.body;
-        const eventName = payload?.event || payload?.type; 
-        const payloadData = payload?.data || payload;
-        const orderId = payloadData?.orderId;
-        const status = payloadData?.status ? payloadData.status.toLowerCase() : null;
-
-        if (!orderId) {
-            return res.status(400).json({ 
-                error: "MISSING_ORDER_ID", 
-                message: "orderId tidak ditemukan pada payload webhook!" 
-            });
-        }
-
-        // 2. Update Database & Proses Kredit Saldo / Event
-        if (orderId && status) {
-            let localTrx = await Transaction.findOne({ orderId });
-
-            if (localTrx) {
-                const prevStatus = localTrx.status.toLowerCase();
-                localTrx.status = status;
-                localTrx.updatedAt = new Date();
-
-                // Dengarkan khusus event transaction.paid (atau status paid/settlement)
-                const isPaidEvent = eventName === "transaction.paid" || ["paid", "settlement", "success"].includes(status);
-
-                if (isPaidEvent && prevStatus !== "paid" && prevStatus !== "settlement") {
-                    console.log(`⚡ [TRANSACTION.PAID] Order ID ${orderId} lunas. Memproses kredit saldo merchant...`);
-
-                    if (!localTrx.productLink && localTrx.itemDetails?.nama) {
-                        const pathProduk = path.join(__dirname, 'database', 'produk.json');
-                        if (fs.existsSync(pathProduk)) {
-                            try {
-                                const products = JSON.parse(fs.readFileSync(pathProduk, 'utf8'));
-                                const targetNama = localTrx.itemDetails.nama.trim().toLowerCase();
-                                const matchedProduct = products.find(p => p.nama && p.nama.trim().toLowerCase() === targetNama);
-
-                                if (matchedProduct && matchedProduct.link) {
-                                    localTrx.productLink = matchedProduct.link;
-                                }
-                            } catch (parseErr) {}
-                        }
-                    }
-                }
-
-                await localTrx.save();
-
-                // Invalidate Cache
-                await deleteCache(`trx_${orderId}`);
-
-                // Jadwalkan Hapus
-                if (["settlement", "success", "paid", "settled", "failed", "cancelled"].includes(status)) {
-                    scheduleTransactionDeletion(orderId);
-                }
-            }
-        }
-
-        // Standard Success Response Envelope
-        return res.status(200).json({ 
-            data: {
-                message: "Webhook diproses dengan sukses",
-                orderId
-            }
-        });
-
-    } catch (err) {
-        console.error("Webhook Error:", err);
-        return res.status(500).json({ 
-            error: "WEBHOOK_PROCESSING_ERROR", 
-            message: "Terjadi kesalahan internal saat memproses webhook" 
-        });
-    }
-});
-
 app.use(compression()); 
 app.use(express.urlencoded({ extended: true }));
+
+app.use(session({
+    secret: process.env.SESSION_SECRET, 
+    resave: false,
+    saveUninitialized: false,
+    cookie: { maxAge: 24 * 60 * 60 * 1000 } 
+}));
+
 app.use(passport.initialize());
 app.use(passport.session());
 
 const userSchema = new mongoose.Schema({
     username: { type: String, required: true, trim: true },
     email: { type: String, required: true, unique: true, trim: true, lowercase: true },
-    password: { type: String, default: null },
-    provider: { type: String, default: 'local' },
-    providerId: { type: String, default: null },
+    password: { type: String, default: null }, // Null jika terdaftar via OAuth (Google/GitHub)
+    provider: { type: String, default: 'local' }, // 'local', 'github', atau 'google'
+    providerId: { type: String, default: null },   // ID unik dari GitHub / Google
     resetPasswordToken: String,
     resetPasswordExpires: Date,
     apikey: { type: String, required: true, unique: true },
@@ -571,10 +119,10 @@ function sendSweetAlert(res, icon, title, text, redirectUrl) {
                     font-family: 'Plus Jakarta Sans', sans-serif;
                 }
                 .swal2-popup {
-                    background: #111827 !important;
+                    background: #111827 !important; /* Ganti rgba semi-transparent menjadi warna solid (menghindari render overhead) */
                     border: 1px solid rgba(255, 255, 255, 0.08) !important;
                     border-radius: 16px !important;
-                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important;
+                    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3) !important; /* Mengurangi ukuran blur bayangan */
                 }
                 .swal2-title {
                     color: #ffffff !important;
@@ -720,7 +268,7 @@ app.post('/auth/register', async (req, res) => {
         else if (premiumListLower.includes(cleanEmail) || premiumListLower.includes(cleanUsername.toLowerCase())) {
             userRole = 'Premium User';
             const randomHex = crypto.randomBytes(2).toString('hex'); 
-            userApiKey = `arulz-${cleanUsername.toLowerCase()}-${randomHex}`;
+            userApiKey = `arulz-${cleanUsername.toLowerCase()}-${randomHex}`; // setting untuk menggantikan apikey premium
         }
 
         const defaultAvatar = 'https://arulz-xd.my.id/files/X1F0Cn.png';
@@ -792,8 +340,8 @@ app.post('/auth/forgot-password', async (req, res) => {
             port: 465,
             secure: true, 
             auth: {
-                user: 'supportarulzxd@gmail.com',
-                pass: 'matsgyapivykobdv'
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS // bukan password akun tapi password app akun
             },
             tls: { rejectUnauthorized: false }
         });
@@ -803,7 +351,7 @@ app.post('/auth/forgot-password', async (req, res) => {
         const resetUrl = `${protocol}://${host}/reset-password/${resetToken}`;
 
         const mailOptions = {
-            from: '"Support ArulzXD" <supportarulzxd@gmail.com>',
+            from: `"Support API" <${process.env.EMAIL_USER}>`,
             to: user.email,
             subject: 'Permintaan Reset Kata Sandi',
             html: `
@@ -875,7 +423,7 @@ app.get('/reset-password/:token', async (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Buat Password Baru - ArulzXD REST API</title>
+        <title>Buat Password Baru - REST API</title>
         <script src="https://cdn.tailwindcss.com"></script>
         <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
         <style>
@@ -953,21 +501,15 @@ app.get('/login', (req, res) => {
 });
 
 
-const JWT_SECRET = process.env.JWT_SECRET || 'arulzxd-super-secret-jwt-key-999';
+const JWT_SECRET = process.env.JWT_SECRET;
 
-const GITHUB_CLIENT_ID = 'Ov23linJtLUZuyJVXpXZ';
-const GITHUB_CLIENT_SECRET = '99834867b22a9f173a64b492e55d4e8f5ef9e9eb';
-const GITHUB_CALLBACK_URL = process.env.GITHUB_CALLBACK_URL || "https://arulz-xd.my.id/auth/github/callback";
+const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID;
+const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET;
+const GITHUB_CALLBACK_URL = process.env.GITHUB_CALLBACK_URL;
 
-const d = "613783942158";
-const e = "-63q31341ivgrlulq8";
-const f = "ha0m4uqmnoa6kq0";
-const cl = ".apps.";
-const id = "googleusercontent.com";
-
-const GOOGLE_CLIENT_ID = `${d}${e}${f}${cl}${id}`;
-const GOOGLE_CLIENT_SECRET = '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';
-const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL || "https://arulz-xd.my.id/auth/google/callback";
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+const GOOGLE_CALLBACK_URL = process.env.GOOGLE_CALLBACK_URL
 
 const checkAuthSession = (req, res, next) => {
     const token = req.cookies.auth_session;
@@ -989,7 +531,7 @@ const checkAuthSession = (req, res, next) => {
 app.use(checkAuthSession);
 
 function generateRandomApiKey() {
-    return 'arulzfree-' + crypto.randomBytes(4).toString('hex');
+    return 'free-' + crypto.randomBytes(4).toString('hex');
 }
 
 /* ==================== ENDPOINT AUTH GITHUB ==================== */
@@ -1003,6 +545,7 @@ app.get('/auth/github/callback', async (req, res) => {
     if (!code) return res.send('Authentication failed: No code provided');
 
     try {
+        // 1. Tukarkan code dengan access token
         const tokenResponse = await axios.post('https://github.com/login/oauth/access_token', {
             client_id: GITHUB_CLIENT_ID,
             client_secret: GITHUB_CLIENT_SECRET,
@@ -1012,6 +555,7 @@ app.get('/auth/github/callback', async (req, res) => {
         const accessToken = tokenResponse.data.access_token;
         if (!accessToken) return res.send('Authentication failed: Invalid access token');
 
+        // 2. Ambil data profile user
         const userResponse = await axios.get('https://api.github.com/user', {
             headers: { Authorization: `token ${accessToken}` }
         });
@@ -1019,6 +563,7 @@ app.get('/auth/github/callback', async (req, res) => {
         const userData = userResponse.data;
         let userEmail = userData.email;
 
+        // 3. Jika email null, ambil dari endpoint /user/emails
         if (!userEmail) {
             try {
                 const emailsResponse = await axios.get('https://api.github.com/user/emails', {
@@ -1036,6 +581,7 @@ app.get('/auth/github/callback', async (req, res) => {
         const finalEmail = (userEmail || `${userData.login}@github.com`).toLowerCase().trim();
         const currentUsername = (userData.login || finalEmail.split('@')[0]).toLowerCase().trim();
 
+        // 4. Cari atau Buat User Baru di MongoDB
         let dbUser = await User.findOne({ email: finalEmail });
 
         if (!dbUser) {
@@ -1056,6 +602,7 @@ app.get('/auth/github/callback', async (req, res) => {
                 userApiKey = `arulz-${userData.login.toLowerCase()}-${randomHex}`;
             }
 
+            // SIMPAN USER BARU KE MONGODB TANPA PASSWORD
             dbUser = new User({
                 username: currentUsername,
                 email: finalEmail,
@@ -1068,12 +615,14 @@ app.get('/auth/github/callback', async (req, res) => {
 
             await dbUser.save();
         } else {
+            // Update Avatar jika berubah
             if (userData.avatar_url && dbUser.avatar !== userData.avatar_url) {
                 dbUser.avatar = userData.avatar_url;
                 await dbUser.save();
             }
         }
 
+        // 5. Satukan payload menggunakan MongoDB Document ID
         const userPayload = {
             id: dbUser._id,
             username: dbUser.username,
@@ -1128,6 +677,7 @@ app.get('/auth/google/callback', async (req, res) => {
         const email = userData.email.toLowerCase().trim();
         const currentUsername = (userData.login || email.split('@')[0]).toLowerCase().trim();
 
+        // 1. Cari atau Buat User Baru di MongoDB
         let dbUser = await User.findOne({ email: email });
 
         if (!dbUser) {
@@ -1148,6 +698,7 @@ app.get('/auth/google/callback', async (req, res) => {
                 userApiKey = `arulz-${currentUsername}-${randomHex}`;
             }
 
+            // SIMPAN USER BARU KE MONGODB TANPA PASSWORD
             dbUser = new User({
                 username: currentUsername,
                 email: email,
@@ -1160,12 +711,14 @@ app.get('/auth/google/callback', async (req, res) => {
 
             await dbUser.save();
         } else {
+            // Update Avatar jika berubah
             if (userData.picture && dbUser.avatar !== userData.picture) {
                 dbUser.avatar = userData.picture;
                 await dbUser.save();
             }
         }
 
+        // 2. Buat JWT Payload menggunakan data dari MongoDB
         const userPayload = {
             id: dbUser._id,
             username: dbUser.username,
@@ -1236,13 +789,8 @@ const headerdescription = "Browse, inspect & fire requests against live endpoint
 const footer = "© Arulz-XD";
 
 const repoList = ['uploadergh', 'uploaderghv2', 'uploaderghv3'];
-const a = 'g';
-const b = 'h';
-const c = 'p';
-const to = '_WaSUBUjo7g3YcCcyo'; 
-const ken = 'OgBEWRKS16qYr1C8Gyg'; 
-const githubToken = `${a}${b}${c}${to}${ken}`;
-const owner = 'arulzzzxd'; 
+const githubToken = process.env.GITHUB_TOKEN;
+const owner = process.env.GITHUB_OWNER; 
 const branch = 'main';
 
 const getRandomRepo = () => repoList[Math.floor(Math.random() * repoList.length)];
@@ -1316,7 +864,7 @@ const getLimitMessage = (keyType, limitCount) => {
     if (keyType === 'premium') {
         return `Limit API Key Premium Anda telah habis (Maks ${limitCount} req/hari). Silakan upgrade ke paket VIP untuk menikmati akses Unlimited tanpa batasan limit!`;
     }
-
+    
     return `Limit API Key Free Anda telah habis (Maks ${limitCount} req/hari). Silakan upgrade ke paket Premium (1.000 req/hari) atau VIP (Unlimited) untuk melanjutkan!`;
 };
 
@@ -1327,6 +875,7 @@ const validateApiKey = async (req, res, next) => {
 
     let userKey = req.query.apikey || req.body?.apikey || req.files?.apikey || req.file?.apikey || req.headers['x-api-key'];
 
+    // Fallback otomatis ke user yang sedang terautentikasi session web dashboard
     if (!userKey && req.user && req.user.apiKey) {
         userKey = req.user.apiKey;
     }
@@ -1442,6 +991,7 @@ const trackAndEnforceLimit = (req, res, next) => {
         USER_LIMIT_TRACKER[userKey] = 0;
     }
 
+    // Blokir langsung jika limit sudah terlampaui / habis
     if (keyType !== 'vip' && USER_LIMIT_TRACKER[userKey] >= maxLimit) {
         return res.status(429).json({
             status: false,
@@ -1450,6 +1000,7 @@ const trackAndEnforceLimit = (req, res, next) => {
         });
     }
 
+    // Tambah counter jika limit belum habis
     if (keyType !== 'vip') {
         USER_LIMIT_TRACKER[userKey] += 1;
     }
@@ -1513,17 +1064,18 @@ app.post('/api/feedback', async (req, res) => {
             port: 465,
             secure: true, 
             auth: {
-                user: 'supportarulzxd@gmail.com',
-                pass: 'matsgyapivykobdv' 
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS 
             },
             tls: {
                 rejectUnauthorized: false 
             }
         });
 
+        // Mapping Tipe Laporan
         let kategoriTeks = 'Laporan Bug';
         let categoryColor = '#ef4444';
-
+        
         switch (type) {
             case 'suggestion':
                 kategoriTeks = 'Saran / Fitur Baru';
@@ -1542,9 +1094,12 @@ app.post('/api/feedback', async (req, res) => {
                 categoryColor = '#ef4444';
         }
 
+        // ==========================================
+        // 1. EMAIL NOTIFIKASI UNTUK ADMIN
+        // ==========================================
         const adminMailOptions = {
-            from: `"${email}" <supportarulzxd@gmail.com>`, 
-            to: 'supportarulzxd@gmail.com', 
+            from: `"${email}" <${process.env.EMAIL_USER}>`, 
+            to: process.env.EMAIL_USE, 
             replyTo: email, 
             subject: `[${type.toUpperCase()}] Feedback Baru dari Dashboard API`,
             html: `
@@ -1600,13 +1155,18 @@ app.post('/api/feedback', async (req, res) => {
             `
         };
 
+        // ==========================================
+        // 2. EMAIL BALASAN OTOMATIS UNTUK PENGGUNA (USER)
+        // ==========================================
         const userMailOptions = {
-            from: '"Support ArulzXD" <supportarulzxd@gmail.com>', 
+            from: `"Support REST API" <${process.env.EMAIL_USER}>`, 
             to: email, 
             subject: `[Received] Terima Kasih atas Feedback Anda - API-ARULZXD`,
             html: `
             <div style="background-color: #030712; padding: 40px 15px; font-family: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #f3f4f6;">
                 <table align="center" border="0" cellpadding="0" cellspacing="0" width="100%" style="max-width: 600px; background-color: #0b0f17; border-radius: 20px; border: 1px solid rgba(6, 182, 212, 0.3); box-shadow: 0 0 35px rgba(6, 182, 212, 0.15); overflow: hidden;">
+                    
+                    <!-- Cyber Banner Header -->
                     <tr>
                         <td style="padding: 30px 30px 20px 30px; text-align: center; background: linear-gradient(180deg, rgba(6, 182, 212, 0.12) 0%, transparent 100%); border-bottom: 1px solid rgba(255, 255, 255, 0.05);">
                             <h1 style="margin: 0; font-size: 26px; font-weight: 800; letter-spacing: -0.025em; color: #ffffff;">
@@ -1614,8 +1174,12 @@ app.post('/api/feedback', async (req, res) => {
                             </h1>
                         </td>
                     </tr>
+
+                    <!-- Content Area -->
                     <tr>
                         <td style="padding: 30px;">
+                            
+                            <!-- Status Confirmation Badge -->
                             <div style="text-align: center; margin-bottom: 25px;">
                                 <div style="display: inline-block; padding: 6px 16px; background-color: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 50px;">
                                     <span style="color: #34d399; font-size: 11px; font-family: monospace; font-weight: 700; letter-spacing: 1.5px; text-transform: uppercase;">
@@ -1623,12 +1187,16 @@ app.post('/api/feedback', async (req, res) => {
                                     </span>
                                 </div>
                             </div>
+
                             <h2 style="margin: 0 0 10px 0; font-size: 20px; font-weight: 700; color: #ffffff; text-align: center;">
                                 Halo, Agen Developer! 👋
                             </h2>
+
                             <p style="font-size: 14px; color: #94a3b8; line-height: 1.7; text-align: center; margin: 0 0 25px 0;">
                                 Terima kasih telah menghubungi kami. Laporan/masukan Anda telah <strong style="color: #22d3ee;">berhasil diterima</strong> oleh server dan telah diteruskan ke tim pengembang kami untuk segera ditinjau.
                             </p>
+
+                            <!-- Ringkasan Pesan yang Dikirim User -->
                             <div style="background-color: #020617; border: 1px solid rgba(6, 182, 212, 0.15); border-radius: 14px; padding: 20px; margin-bottom: 25px;">
                                 <div style="display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255, 255, 255, 0.05); padding-bottom: 10px; margin-bottom: 12px; font-size: 12px;">
                                     <span style="color: #64748b; font-family: monospace;">TIPE TRANSMISI:</span>
@@ -1637,36 +1205,45 @@ app.post('/api/feedback', async (req, res) => {
                                 <div style="font-size: 10px; font-family: monospace; color: #64748b; text-transform: uppercase; margin-bottom: 6px;">// SALINAN_PESAN_ANDA</div>
                                 <p style="margin: 0; font-family: 'JetBrains Mono', Consolas, monospace; font-size: 13px; color: #cbd5e1; white-space: pre-wrap; line-height: 1.6;">${message}</p>
                             </div>
+
+                            <!-- Info Estimasi Respons -->
                             <div style="background-color: rgba(6, 182, 212, 0.05); border-left: 3px solid #06b6d4; padding: 14px 16px; border-radius: 0 10px 10px 0; margin-bottom: 30px;">
                                 <p style="margin: 0; font-size: 12px; color: #94a3b8; line-height: 1.5;">
                                     📌 <strong style="color: #ffffff;">Catatan:</strong> Tim kami biasanya memproses dan membalas masukan dalam kurun waktu <span style="color: #22d3ee;">1x24 jam</span>. Pengguna paket Premium/VIP akan diprioritaskan.
                                 </p>
                             </div>
+
+                            <!-- Quick Action Buttons -->
                             <div style="text-align: center;">
-                                <a href="https://arulz-xd.my.id/doc" style="display: inline-block; padding: 12px 24px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(6, 182, 212, 0.3); color: #22d3ee; font-weight: 700; font-size: 12px; text-decoration: none; border-radius: 10px; text-transform: uppercase; letter-spacing: 1px; margin: 0 5px 10px 5px;">
+                                <a href="/doc" style="display: inline-block; padding: 12px 24px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(6, 182, 212, 0.3); color: #22d3ee; font-weight: 700; font-size: 12px; text-decoration: none; border-radius: 10px; text-transform: uppercase; letter-spacing: 1px; margin: 0 5px 10px 5px;">
                                     Lihat Dokumentasi
                                 </a>
-                                <a href="https://arulz-xd.my.id" style="display: inline-block; padding: 12px 24px; background: linear-gradient(90deg, #06b6d4 0%, #3b82f6 100%); color: #020617; font-weight: 800; font-size: 12px; text-decoration: none; border-radius: 10px; text-transform: uppercase; letter-spacing: 1px; margin: 0 5px 10px 5px; box-shadow: 0 4px 15px rgba(6, 182, 212, 0.2);">
+                                <a href="/" style="display: inline-block; padding: 12px 24px; background: linear-gradient(90deg, #06b6d4 0%, #3b82f6 100%); color: #020617; font-weight: 800; font-size: 12px; text-decoration: none; border-radius: 10px; text-transform: uppercase; letter-spacing: 1px; margin: 0 5px 10px 5px; box-shadow: 0 4px 15px rgba(6, 182, 212, 0.2);">
                                     Kembali ke Dashboard
                                 </a>
                             </div>
+
                         </td>
                     </tr>
+
+                    <!-- Cyber Footer -->
                     <tr>
                         <td style="padding: 20px 30px; background-color: #020617; border-top: 1px solid rgba(255, 255, 255, 0.05); text-align: center;">
                             <p style="font-size: 11px; color: #475569; margin: 0 0 8px 0; font-family: monospace;">
                                 EMAIL AUTOMATED RESPONSE | DO NOT REPLY DIRECTLY TO THIS EMAIL
                             </p>
                             <p style="font-size: 11px; color: #64748b; margin: 0;">
-                                © 2026 <a href="https://arulz-xd.my.id" style="color: #22d3ee; text-decoration: none;">Api ArulzXD</a>. All rights reserved.
+                                © 2026 REST API. All rights reserved.
                             </p>
                         </td>
                     </tr>
+
                 </table>
             </div>
             `
         };
 
+        // Kirim email ke admin & email balasan ke pengguna sekaligus
         await Promise.all([
             transporter.sendMail(adminMailOptions),
             transporter.sendMail(userMailOptions)
@@ -1808,6 +1385,8 @@ app.post('/uploadfile', localFileUploader, async (req, res) => {
     const baseWebUrl = process.env.BASE_URL || `${protocol}://${req.get('host')}`;
     const rawUrl = `${baseWebUrl}/files/${fileName}`;
 
+    // OPTIMASI FRONTEND: Menghapus backdrop-filter blur, radial-gradient, animasi checkmark draw, 
+    // dan scaleIn yang berlebihan untuk menjaga kenyamanan device berspesifikasi rendah.
     res.send(`
       <!DOCTYPE html>
       <html lang="id" class="dark">
@@ -2065,8 +1644,9 @@ app.get('/status', (req, res) => {
 });
 
 app.get('/database/produk', (req, res) => {
+    // Sesuaikan path ke file produk.json Anda
     const pathProduk = path.join(__dirname, 'database', 'produk.json'); 
-
+    
     fs.readFile(pathProduk, 'utf8', (err, data) => {
         if (err) {
             console.error("Gagal membaca database produk:", err);
@@ -2254,6 +1834,7 @@ app.get('/doc', (req, res) => {
     }
     .scrollbar-hide::-webkit-scrollbar { display: none; }
     .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+    /* 3D CHROME STYLE BADGES */
     .border-3d-free {
         background: linear-gradient(135deg, #059669 0%, #34d399 50%, #065f46 100%);
         box-shadow: inset 0 2px 4px rgba(255,255,255,0.4), 0 4px 12px rgba(0,0,0,0.5);
@@ -2313,17 +1894,22 @@ app.get('/doc', (req, res) => {
     </div>
     
     <!-- User Profile Pop-up Modal -->
+            <!-- User Profile Pop-up Modal -->
     <div id="profilePopup" class="fixed inset-0 z-[99999] hidden">
       <div class="fixed inset-0 bg-black/80 backdrop-blur-sm" onclick="closeProfilePopup()"></div>
       <div class="fixed inset-0 flex items-center justify-center p-4">
         <div class="w-full max-w-sm bg-slate-900/95 border border-white/10 rounded-2xl p-6 shadow-2xl relative font-['Space_Grotesk'] overflow-hidden">
             
+            <!-- Glow Aesthetic Decor -->
             <div class="absolute -top-10 -left-10 w-28 h-28 bg-cyan-500/10 rounded-full blur-2xl pointer-events-none"></div>
 
             <div class="flex flex-col items-center text-center mt-2 relative z-10">
+                <!-- Avatar Section -->
                 <div class="relative w-32 h-32 flex items-center justify-center mb-3">
+                    <!-- Badge Rank / Role -->
                     <div id="avatarBadge" class="absolute -top-5 z-20 transform scale-90"></div>
                     
+                    <!-- 3D Border & Main Avatar Core -->
                     <div id="avatar3DBorder" class="w-24 h-24 rounded-full p-[4px] z-10 flex items-center justify-center transition-all duration-300">
                         <div class="w-full h-full rounded-full bg-slate-950 p-[2px] flex items-center justify-center shadow-inner">
                             <img id="userAvatar" src="https://via.placeholder.com/150" alt="Avatar" class="w-full h-full rounded-full object-cover">
@@ -2331,10 +1917,13 @@ app.get('/doc', (req, res) => {
                     </div>
                 </div>
 
+                <!-- User Meta Information -->
                 <h2 id="userName" class="text-xl font-extrabold text-white tracking-wide mb-0.5">Loading...</h2>
                 <p id="userEmail" class="text-slate-400 font-mono text-xs mb-5">loading-email@mail.com</p>
                 
+                <!-- Detail Info Container -->
                 <div class="w-full space-y-4 text-left mb-5">
+                    <!-- Role Card -->
                     <div class="bg-slate-950/40 border border-white/5 rounded-xl p-3.5 flex flex-col gap-1">
                         <span class="text-[10px] text-cyan-400 font-mono tracking-wider uppercase font-bold opacity-80">Account Type / Role</span>
                         <div id="userRoleContainer" class="flex items-center gap-2 font-bold text-slate-200 text-sm">
@@ -2342,7 +1931,9 @@ app.get('/doc', (req, res) => {
                         </div>
                     </div>
 
+                    <!-- API Key Card -->
                     <div class="bg-slate-950/40 border border-white/5 rounded-xl p-3.5 flex flex-col gap-2">
+                        <!-- Warning/Notice Animasi Kedip -->
                         <div class="flex items-center gap-1.5 text-[10px] text-amber-400 font-medium tracking-wide animate-pulse bg-amber-500/5 px-2 py-1 rounded border border-amber-500/10">
                             <span class="w-1.5 h-1.5 rounded-full bg-amber-400 block"></span>
                             Jangan bagikan API Key ini kepada siapapun!
@@ -2350,6 +1941,7 @@ app.get('/doc', (req, res) => {
                         
                         <div class="flex items-center justify-between mt-1">
                             <span class="text-[10px] text-cyan-400 font-mono tracking-wider uppercase font-bold opacity-80">Your Personal API Key</span>
+                            <!-- Tombol Copy Diperbesar -->
                             <button onclick="copyText(document.getElementById('userApiKey').innerText, 'API Key')" class="text-slate-400 hover:text-cyan-400 transition-colors p-2 -mr-2 bg-white/5 hover:bg-white/10 rounded-lg border border-white/5" title="Copy Key">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
                                     <path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
@@ -2362,7 +1954,9 @@ app.get('/doc', (req, res) => {
                     </div>
                 </div>
 
+                <!-- Action & Navigation Buttons -->
                 <div class="w-full flex flex-col gap-3">
+                    <!-- Tombol Upgrade Premium (Diatas Tutup & Logout) -->
                     <a href="/upgrade-apikey" class="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-amber-500 to-yellow-400 hover:from-amber-600 hover:to-yellow-500 text-slate-950 text-xs font-black py-3 px-4 rounded-xl transition duration-200 tracking-wider uppercase shadow-lg shadow-amber-500/10">
                         <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
                             <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z"/>
@@ -2370,6 +1964,7 @@ app.get('/doc', (req, res) => {
                         Upgrade
                     </a>
                     
+                    <!-- Bottom Control Buttons -->
                     <div class="flex gap-3 w-full">
                         <button onclick="closeProfilePopup()" class="flex-1 bg-zinc-800 hover:bg-zinc-700 text-gray-200 text-xs font-bold py-3 px-4 rounded-xl transition duration-200 border border-white/5 tracking-wider uppercase">
                             Tutup
@@ -2417,6 +2012,7 @@ app.get('/doc', (req, res) => {
         </div>
     </div>
 
+<!-- Ganti template lama Anda dengan container kosong ini -->
 <div id="toast" class="fixed top-6 right-6 z-[9999] flex flex-col gap-3 pointer-events-none items-end"></div>
 
     <!-- Header Actions -->
@@ -2537,7 +2133,7 @@ app.get('/doc', (req, res) => {
                 </svg>
                 SUPPORT
             </a>
-            <a href="https://t.me/arulzzxd" target="_blank" class="menu-link hover:text-cyan-400 transition-colors flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 text-[10px] opacity-80 normal-case">
+            <a href="https://t.me/your_telegram" target="_blank" class="menu-link hover:text-cyan-400 transition-colors flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-white/5 text-[10px] opacity-80 normal-case">
                 <svg class="w-5 h-5 text-cyan-400 fill-current" viewBox="0 0 24 24">
                     <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.64 6.8c-.15 1.58-.8 5.42-1.13 7.19-.14.75-.42 1-.68 1.03-.58.05-1.02-.38-1.58-.75-.88-.58-1.38-.94-2.23-1.5-1-.65-.35-1 .22-1.58.15-.15 2.71-2.48 2.76-2.69.01-.03.01-.14-.07-.2-.08-.06-.19-.04-.27-.02-.11.02-1.93 1.23-5.46 3.62-.51.35-.98.53-1.39.51-.46-.01-1.33-.26-1.99-.48-.8-.26-1.43-.41-1.38-.86.03-.24.35-.48.97-.73 3.8-1.65 6.34-2.74 7.61-3.25 3.61-1.47 4.36-1.73 4.85-1.74.11 0 .35.03.5.16.13.12.17.27.18.38-.01.12.01.27 0 .42z"/>
                 </svg>
@@ -2600,9 +2196,9 @@ app.get('/doc', (req, res) => {
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" />
                     </svg>
-                    <span class="underline break-all font-semibold">https://arulz-xd.my.id/</span>
+                    <span class="underline break-all font-semibold">https://your-domain.com/</span>
                 </div>
-                <a href="https://wa.me/6285122629940?text=Halo%20Arulz,%20saya%20ingin%20request%20fitur%20baru%20di%20REST%20API%20:" 
+                <a href="https://wa.me/628xxxxxxxxxx?text=Halo,%20saya%20ingin%20request%20fitur%20baru%20di%20REST%20API%20:" 
                    target="_blank" 
                    class="w-full sm:w-auto px-5 py-2 bg-gradient-to-r from-cyan-600 to-cyan-500 hover:from-cyan-500 hover:to-cyan-400 text-slate-950 font-bold text-[11px] uppercase rounded-lg shadow-md transition-all active:scale-95 light-mode:text-white text-center flex items-center justify-center gap-1.5">
                     <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
@@ -2614,7 +2210,7 @@ app.get('/doc', (req, res) => {
 
             <!-- Social Links -->
             <div class="flex justify-center gap-4 mt-4 max-w-4xl mx-auto">
-                <a href="https://whatsapp.com/channel/0029VbAwdIyJJhzRMpjUcS3P" 
+                <a href="https://whatsapp.com/channel/your_channel_id" 
                    target="_blank" 
                    class="flex-1 glass-panel py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-white/5 transition-all text-center flex items-center justify-center gap-2 border border-white/5 text-slate-300">
                    <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -2622,7 +2218,7 @@ app.get('/doc', (req, res) => {
                    </svg>
                    Channel
                 </a>
-                <a href="https://chat.whatsapp.com/LBeGqVsmDBb6j29ysuusd9" 
+                <a href="https://chat.whatsapp.com/your_group_id" 
                    target="_blank" 
                    class="flex-1 glass-panel py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-white/5 transition-all text-center flex items-center justify-center gap-2 border border-white/5 text-slate-300">
                    <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
