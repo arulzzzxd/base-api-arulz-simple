@@ -40,7 +40,8 @@ app.use(compression());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(session({
-    secret: process.env.SESSION_SECRET, 
+    // Menambahkan fallback nilai acak agar tidak error saat process.env.SESSION_SECRET bernilai undefined
+    secret: process.env.SESSION_SECRET || 'default_arulzxd_session_secret_key_fallback_123', 
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 24 * 60 * 60 * 1000 } 
