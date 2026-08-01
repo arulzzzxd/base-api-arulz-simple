@@ -1,5 +1,5 @@
 /* =========================================================================
-   SCRIPT.JS REST API (UPDATED & FIXED)
+   SCRIPT.JS REST API (CLEAN VERSION)
    ========================================================================= */
 
 const BASE_URL = window.location.origin;
@@ -11,7 +11,6 @@ let allApiElements = [];
 let totalEndpoints = 0;
 let totalCategories = 0;
 let activeCategory = 'all';
-
 
 const themeToggleBtn = document.getElementById('themeToggle');
 const body = document.body;
@@ -72,10 +71,9 @@ const i18n = {
 };
 
 /* =========================================================================
-   ADDITIONAL / MISSING CORE FUNCTIONS
+   ADDITIONAL / CORE FUNCTIONS
    ========================================================================= */
 
-// Fungsi Toggle Grup Kategori Utama
 function toggleCategory(catIdx) {
     const catDiv = document.getElementById(`cat-${catIdx}`);
     const catIcon = document.getElementById(`cat-icon-${catIdx}`);
@@ -91,11 +89,9 @@ function toggleCategory(catIdx) {
     }
 }
 
-// SVG Icon Helper untuk Plus (+) & Minus (-)
 const SVG_PLUS = `<svg class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15"/></svg>`;
 const SVG_MINUS = `<svg class="w-4 h-4 transition-transform duration-200" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 12h-15"/></svg>`;
 
-// Fungsi Toggle Detail Formulir Endpoint (+ / -)
 function toggleEndpoint(catIdx, epIdx) {
     const epDiv = document.getElementById(`ep-${catIdx}-${epIdx}`);
     const epIcon = document.getElementById(`ep-icon-${catIdx}-${epIdx}`);
@@ -111,8 +107,6 @@ function toggleEndpoint(catIdx, epIdx) {
     }
 }
 
-
-// Fungsi Menutup Sidebar Menu Bio & Overlay
 function closeSidebarMenu() {
     const bioDropdown = document.getElementById('bioDropdown');
     const menuOverlay = document.getElementById('menuOverlay');
@@ -122,7 +116,6 @@ function closeSidebarMenu() {
     }
 }
 
-// Fungsi Generator Komponen Pratinjau Media Hasil Eksekusi
 function createMediaPreview(url, contentType, fullPath) {
     const type = contentType || '';
     if (type.startsWith('image/') || url.match(/\.(jpeg|jpg|gif|png|webp)/i)) {
@@ -268,27 +261,22 @@ function showToast(message, isError = false) {
     const container = document.getElementById('toast');
     if (!container) return;
 
-    // 1. BUAT ELEMEN BOX TOAST SECARA DINAMIS (Bentuk Persegi Panjang Cyberpunk)
     const toast = document.createElement('div');
-    
-    // Base Class: Desain persegi panjang, backdrop blur, dan animasi performa tinggi
     toast.className = "flex items-center gap-3.5 px-5 py-3.5 rounded-xl border backdrop-blur-xl min-w-[300px] max-w-[420px] transition-all duration-500 ease-[cubic-bezier(0.19,1,0.22,1)] opacity-0 translate-y-[-20px] scale-95 pointer-events-auto will-change-[transform,opacity] select-none";
 
     let iconHTML = '';
     let iconColor = '';
 
-    // 2. ATUR WARNA NEON CYBERPUNK (Cyan untuk Sukses, Pink-Red untuk Error)
     if (isError) {
         iconHTML = '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clip-rule="evenodd"/>';
-        iconColor = '#ff2a74'; // Neon Pink
+        iconColor = '#ff2a74';
         toast.classList.add('border-pink-500/50', 'bg-slate-950/90', 'shadow-[0_0_20px_rgba(255,42,116,0.15)]');
     } else {
         iconHTML = '<path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>';
-        iconColor = '#00f0ff'; // Electric Cyan
+        iconColor = '#00f0ff';
         toast.classList.add('border-cyan-500/50', 'bg-slate-950/90', 'shadow-[0_0_20px_rgba(0,240,255,0.15)]');
     }
 
-    // 3. STRUKTUR INTERNAL (Mirip komponen lama Anda tapi berbasis template string dinamis)
     toast.innerHTML = `
         <div class="flex-shrink-0 p-1.5 rounded-lg bg-white/5">
             <svg class="w-6 h-6 flex-shrink-0 transition-all duration-500 scale-100" viewBox="0 0 20 20" fill="currentColor" style="color: ${iconColor};">
@@ -302,21 +290,16 @@ function showToast(message, isError = false) {
         </div>
     `;
 
-    // 4. MASUKKAN KE CONTAINER (Otomatis menumpuk ke bawah)
     container.appendChild(toast);
 
-    // Memicu animasi muncul yang mulus
     requestAnimationFrame(() => {
         toast.classList.remove('opacity-0', 'translate-y-[-20px]', 'scale-95');
         toast.classList.add('opacity-100', 'translate-y-0', 'scale-100');
     });
 
-    // 5. ANIMASI HILANG SATU PER SATU (Setiap toast punya timer 4 detik mandiri)
     setTimeout(() => {
         toast.classList.remove('opacity-100', 'translate-y-0', 'scale-100');
         toast.classList.add('opacity-0', 'scale-90', 'translate-x-[20px]');
-        
-        // Hapus dari DOM setelah animasi transisi CSS selesai
         setTimeout(() => {
             toast.remove();
         }, 500);
@@ -343,15 +326,6 @@ function updateLivePreview(catIdx, epIdx, method, basePath, endpointType) {
     const formData = new FormData(form);
     const params = new URLSearchParams();
 
-    // Ambil dari input form langsung
-    let userApikey = formData.get('apikey'); 
-
-    // Jika kosong dan mau dikasih default key buat tester (opsional, jika tidak dihapus saja)
-    if (!userApikey) {
-        userApikey = ''; // Biarkan kosong agar API menolak (karena belum login / input kosong)
-    }
-
-    // Deteksi apakah form memiliki input file yang terisi
     let formHasFile = false;
     form.querySelectorAll('input[type="file"]').forEach(fileInput => {
         if (fileInput.files.length > 0) {
@@ -359,24 +333,21 @@ function updateLivePreview(catIdx, epIdx, method, basePath, endpointType) {
         }
     });
 
-    // Tentukan method final (Jika ada file, otomatis dipaksa ke POST sesuai executeRequest)
     let finalMethod = method.toUpperCase();
     if (formHasFile) {
         finalMethod = 'POST';
     }
 
-    // Ambil query parameter untuk URL jika method adalah GET atau DELETE
     if (finalMethod === 'GET' || finalMethod === 'DELETE') {
         for (const [key, value] of formData.entries()) {
-            if (value && typeof value === 'string' && key !== 'apikey') {
+            if (value && typeof value === 'string') {
                 params.append(key, value);
             }
         }
     }
 
-    params.append('apikey', userApikey);
     const queryStr = params.toString();
-    const finalUrl = `${BASE_URL}${basePath}?${queryStr}`;
+    const finalUrl = queryStr ? `${BASE_URL}${basePath}?${queryStr}` : `${BASE_URL}${basePath}`;
 
     const urlContainer = document.getElementById(`live-url-${catIdx}-${epIdx}`);
     const curlContainer = document.getElementById(`live-curl-${catIdx}-${epIdx}`);
@@ -387,15 +358,10 @@ function updateLivePreview(catIdx, epIdx, method, basePath, endpointType) {
         if (finalMethod === 'GET' || finalMethod === 'DELETE') {
             curlContainer.textContent = `curl -X ${finalMethod} "${finalUrl}"`;
         } else {
-            // JIKA METHOD ADALAH POST / PUT / PATCH
             if (formHasFile) {
-                // Khusus POST yang mensupport File (Multipart Form Data)
                 const bodyParams = [];
                 for (const [key, value] of formData.entries()) {
-                    if (key === 'apikey') continue;
-                    
                     if (value instanceof File) {
-                        // Jika value berbentuk file, tampilkan nama filenya atau placeholder @file
                         const fileName = value.name ? value.name : 'file.bin';
                         bodyParams.push(`-F "${key}=@${fileName}"`);
                     } else if (value) {
@@ -405,10 +371,8 @@ function updateLivePreview(catIdx, epIdx, method, basePath, endpointType) {
                 const dataString = bodyParams.length ? ` ${bodyParams.join(' ')}` : '';
                 curlContainer.textContent = `curl -X ${finalMethod} "${finalUrl}"${dataString}`;
             } else {
-                // Jika POST biasa berupa JSON (Tidak ada file)
                 const bodyParams = [];
                 for (const [key, value] of formData.entries()) {
-                    if (key === 'apikey') continue;
                     if (value && typeof value === 'string') {
                         bodyParams.push(`"${key}": "${value}"`);
                     }
@@ -448,7 +412,6 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
 
     responseDiv.classList.remove('hidden');
 
-    // LOADING STATE: Menggunakan skeleton loader & pulse modern
     responseContent.innerHTML = `
         <div class="flex flex-col items-center justify-center p-12 text-sm font-mono tracking-wider text-cyan-400 gap-3">
             <div class="relative flex h-4 w-4">
@@ -498,7 +461,8 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
                     queryParams.append(key, value);
                 }
             }
-            fullPath += '?' + queryParams.toString();
+            const qStr = queryParams.toString();
+            if (qStr) fullPath += '?' + qStr;
         } else {
             if (formHasFile) {
                 fetchOptions.body = rawFormData;
@@ -517,7 +481,6 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
         const endTime = performance.now();
         const duration = Math.round(endTime - startTime);
 
-        // Handler Error Status (403 / 429 / 503)
         if (response.status === 403 || response.status === 429 || response.status === 503) {
             const data = await response.json();
             const rawErrText = JSON.stringify(data, null, 2);
@@ -535,11 +498,6 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
                 </div>
             `;
             showToast(data.message || "Akses Ditolak!", true);
-            
-            // Panggil fungsi update limit real-time saat mendeteksi error penolakan status
-            if (typeof fetchAndUpdateUserLimit === 'function') {
-                fetchAndUpdateUserLimit();
-            }
             return;
         }
 
@@ -556,7 +514,6 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
         let mediaBlobObject = null;
         let hintText = ""; 
 
-        // Fungsi internal untuk menentukan teks petunjuk media secara akurat
         function getMediaHint(urlOrMime) {
             const str = urlOrMime.toLowerCase();
             if (str.includes('image/') || str.match(/\.(jpeg|jpg|gif|png|webp)/i)) return "Klik gambar untuk memperbesar gambar";
@@ -650,7 +607,6 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
             </button>
         `;
 
-        // RENDER CONTAINER UTAMA
         responseContent.innerHTML = `
             <div class="rounded-xl overflow-hidden border-2 border-cyan-500/40 dark:border-2 dark:border-cyan-500/40 light-mode:border-2 light-mode:border-slate-400 bg-slate-950/40 dark:bg-slate-950/40 light-mode:bg-white shadow-2xl transition-all duration-300">
                 
@@ -703,7 +659,6 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
             </div>
         `;
 
-        // PENGIKAT EVENT HANDLER
         document.getElementById(`copy-btn-${catIdx}-${epIdx}`).onclick = () => {
             copyText(rawResponseText || JSON.stringify({status: response.status, info: cleanContentType}), "Response");
         };
@@ -747,10 +702,6 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
 
         showToast(i18n[currentLang].toastRequestSuccess);
 
-        if (typeof fetchAndUpdateUserLimit === 'function') {
-            fetchAndUpdateUserLimit();
-        }
-
     } catch (error) {
         responseContent.innerHTML = `
             <div class="p-4 rounded-xl border-2 border-red-500 bg-red-500/5 text-red-400 text-xs font-mono break-all flex items-center gap-2">
@@ -766,11 +717,9 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
         spinner.style.display = ''; 
         spinner.classList.remove('active');
         executeBtn.innerHTML = originalBtnHtml;
-        fetchAndUpdateUserLimit();
     }
 }
 
-// Helper sanitasi string tag HTML
 function escapeHtml(text) {
     if (typeof text !== 'string') return text;
     return text
@@ -802,7 +751,6 @@ function clearResponse(catIdx, epIdx, endpointType) {
         }
     }
 }
-
 
 function renderCategoryFilters() {
     const container = document.getElementById('categoryFilters');
@@ -918,21 +866,9 @@ function loadApis() {
             if (item.status === 'update') { statusClass = 'status-update'; statusText = "UPDATE"; }
             else if (item.status === 'error' || item.status === 'perbaikan') { statusClass = 'status-error'; statusText = "MAINTENANCE"; }
 
-            // Menentukan Badge Berdasarkan Tipe Endpoint (VIP, PREMIUM, FREE) dengan SVG
-            let badgeTypeHtml = '';
-            if (epType === 'vip') {
-                badgeTypeHtml = `<span class="flex items-center px-1.5 py-0.5 text-[9px] rounded-sm bg-purple-500/20 text-purple-400 border border-purple-500/30 font-bold uppercase tracking-wider animate-pulse">
-                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24"><path d="M19 8.25l-7 11.5-7-11.5L9.25 3h5.5L19 8.25z"/></svg> VIP
-                </span>`;
-            } else if (epType === 'premium') {
-                badgeTypeHtml = `<span class="flex items-center px-1.5 py-0.5 text-[9px] rounded-sm bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold uppercase tracking-wider animate-pulse">
-                    <svg class="w-3 h-3 mr-1" fill="currentColor" viewBox="0 0 24 24"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zm14 3c0 .6-.4 1-1 1H6c-.6 0-1-.4-1-1v-1h14v1z"/></svg> PREMIUM
-                </span>`;
-            } else {
-                badgeTypeHtml = `<span class="flex items-center px-1.5 py-0.5 text-[9px] rounded-sm bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold uppercase tracking-wider">
-                    <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> FREE
-                </span>`;
-            }
+            let badgeTypeHtml = `<span class="flex items-center px-1.5 py-0.5 text-[9px] rounded-sm bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold uppercase tracking-wider">
+                <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg> FREE
+            </span>`;
 
             html += `
             <div class="api-item border-t border-white/10 light-mode:border-slate-200" 
@@ -988,29 +924,7 @@ function loadApis() {
                         const pType = item.params[paramName];
                         const isRequired = true; 
                         let paramDesc = (pType && pType.type) ? pType.type : (pType || paramName);
-
-                        let inputValue = '';
                         let inputPlaceholder = `Masukkan ${paramName}`;
-
-                        // Logika API Key dengan pemisahan tipe Free, Premium, dan VIP
-if (paramName.toLowerCase() === 'apikey') {
-    // Cek apakah displayApiKey terdefinisi dan BUKAN 'Silakan Login'
-    const isUserLoggedIn = (typeof displayApiKey !== 'undefined' && displayApiKey !== 'Silakan Login' && displayApiKey !== '');
-    
-    if (epType === 'vip') {
-        // KOSONGKAN value agar tidak memakai apikey free
-        inputValue = ''; 
-        inputPlaceholder = 'Masukkan apikey VIP';
-    } else if (epType === 'premium') {
-        // KOSONGKAN value agar tidak memakai apikey free
-        inputValue = ''; 
-        inputPlaceholder = 'Masukkan apikey Premium';
-    } else {
-        // Isi otomatis HANYA untuk endpoint tipe FREE
-        inputValue = isUserLoggedIn ? displayApiKey : '';
-        inputPlaceholder = isUserLoggedIn ? 'Masukkan apikey' : 'Silakan login terlebih dahulu';
-    }
-}
 
                         html += `
                         <div>
@@ -1032,7 +946,7 @@ if (paramName.toLowerCase() === 'apikey') {
                             html += `</select>`;
                         } 
                         else {
-                            html += `<input type="text" name="${paramName}" value="${inputValue}" oninput="updateLivePreview(${catIdx}, ${epIdx}, '${method}', '${path}', '${epType}')" class="w-full px-3 py-2 rounded-lg bg-black/40 light-mode:bg-white border border-white/10 light-mode:border-slate-300 text-white light-mode:text-slate-900 focus:outline-none focus:border-cyan-500 code-font text-sm" placeholder="${inputPlaceholder}" ${isRequired ? 'required' : ''}>`;
+                            html += `<input type="text" name="${paramName}" value="" oninput="updateLivePreview(${catIdx}, ${epIdx}, '${method}', '${path}', '${epType}')" class="w-full px-3 py-2 rounded-lg bg-black/40 light-mode:bg-white border border-white/10 light-mode:border-slate-300 text-white light-mode:text-slate-900 focus:outline-none focus:border-cyan-500 code-font text-sm" placeholder="${inputPlaceholder}" ${isRequired ? 'required' : ''}>`;
                         }
 
                         html += `</div>`;
@@ -1067,10 +981,7 @@ if (paramName.toLowerCase() === 'apikey') {
 
 function initMultiMusicPlayer() {
     const playlist = window.musicPlaylist || [];
-    if (!playlist.length) {
-        console.warn("Playlist kosong atau tidak ditemukan.");
-        return;
-    }
+    if (!playlist.length) return;
 
     let currentTrackIdx = 0;
     const audio = document.getElementById('audioElement');
@@ -1095,7 +1006,6 @@ function initMultiMusicPlayer() {
         return `${mins}:${remainingSecs < 10 ? '0' : ''}${remainingSecs}`;
     }
 
-    // Fungsi utama mengirim durasi dan posisi detik ke sistem Android
     function updateMediaSessionPosition() {
         if ('mediaSession' in navigator && audio && !isNaN(audio.duration) && audio.duration > 0) {
             try {
@@ -1114,7 +1024,6 @@ function initMultiMusicPlayer() {
         currentTrackIdx = index;
         const track = playlist[index];
         
-        // Memastikan elemen ada sebelum memanipulasi DOM
         if (audio) audio.src = track.url || '';
         if (titleEl) titleEl.textContent = track.title || 'Unknown Title';
         if (artistEl) artistEl.textContent = track.artist || 'Unknown Artist';
@@ -1123,7 +1032,6 @@ function initMultiMusicPlayer() {
         if (progressBar) progressBar.style.width = '0%';
         if (currentTimeEl) currentTimeEl.textContent = '0:00';
         
-        // --- Integrasi dengan Notifikasi Sistem / Media Session API ---
         if ('mediaSession' in navigator) {
             navigator.mediaSession.metadata = new MediaMetadata({
                 title: track.title || 'Unknown Title',
@@ -1139,7 +1047,6 @@ function initMultiMusicPlayer() {
                 ]
             });
 
-            // Reset posisi bar Android menjadi 0 saat lagu berpindah
             if ('setPositionState' in navigator.mediaSession) {
                 navigator.mediaSession.setPositionState({
                     duration: 0,
@@ -1148,7 +1055,6 @@ function initMultiMusicPlayer() {
                 });
             }
 
-            // Hubungkan tombol notifikasi sistem Android ke aksi player web
             navigator.mediaSession.setActionHandler('previoustrack', () => {
                 if (prevBtn) prevBtn.click();
             });
@@ -1162,7 +1068,6 @@ function initMultiMusicPlayer() {
                 if (audio) audio.pause();
             });
             
-            // Fitur agar garis durasi di Android bisa digeser maju-mundur
             navigator.mediaSession.setActionHandler('seekto', (details) => {
                 if (audio && details.seekTime) {
                     audio.currentTime = details.seekTime;
@@ -1170,7 +1075,6 @@ function initMultiMusicPlayer() {
                 }
             });
         }
-        // -------------------------------------------------------------
         
         renderPlaylistItems();
     }
@@ -1204,7 +1108,6 @@ function initMultiMusicPlayer() {
         });
     }
 
-    // Event Listeners dengan pengecekan elemen gratis (anti error)
     if (playBtn && audio) {
         playBtn.addEventListener('click', () => { 
             audio.paused ? audio.play().catch(e => console.log(e)) : audio.pause(); 
@@ -1236,14 +1139,11 @@ function initMultiMusicPlayer() {
                 progressBar.style.width = `${(audio.currentTime / audio.duration) * 100}%`;
                 currentTimeEl.textContent = formatTime(audio.currentTime);
             }
-            // Kirim data waktu berjalan secara berkala ke sistem Android
             updateMediaSessionPosition();
         });
 
         audio.addEventListener('loadedmetadata', () => { 
             if (totalDurationEl) totalDurationEl.textContent = formatTime(audio.duration); 
-            
-            // Memberikan sedikit jeda agar objek audio.duration siap terbaca penuh oleh browser
             setTimeout(() => {
                 updateMediaSessionPosition();
             }, 250);
@@ -1285,7 +1185,6 @@ function initMultiMusicPlayer() {
         });
     }
 
-    // Muat lagu pertama saat inisialisasi awal
     loadTrack(0);
 }
 
@@ -1335,114 +1234,16 @@ function initImageLightbox() {
     });
 }
 
-async function fetchAndUpdateUserLimit() {
-    try {
-        const urlParams = new URLSearchParams(window.location.search);
-        
-        // Prioritas pencarian API Key: URL Param -> Global Variable -> LocalStorage -> Form Input
-        let apiKey = urlParams.get('apikey') 
-            || (typeof displayApiKey !== 'undefined' && displayApiKey !== 'Silakan Login' ? displayApiKey : '');
-
-        if (!apiKey) {
-            const firstApiKeyInput = document.querySelector('input[name="apikey"]');
-            if (firstApiKeyInput && firstApiKeyInput.value) {
-                apiKey = firstApiKeyInput.value;
-            }
-        }
-
-        // Panggil endpoint user-limit (cookie auth_session akan otomatis terkirim via credentials)
-        const response = await fetch(`/api/user-limit?apikey=${encodeURIComponent(apiKey)}`, {
-            headers: { 'Cache-Control': 'no-cache' }
-        });
-
-        if (!response.ok) return;
-        
-        const data = await response.json();
-
-        const limitUsedEl = document.getElementById('userLimitUsed');
-        const limitMaxEl = document.getElementById('userLimitMax');
-        const limitBadgeEl = document.getElementById('userLimitBadge');
-
-        if (limitUsedEl && limitMaxEl) {
-            // Update UI jika data dari server valid
-            if (data.limitUsed !== undefined && data.limitUsed !== null) {
-                limitUsedEl.textContent = data.limitUsed;
-            }
-            if (data.maxLimit !== undefined && data.maxLimit !== null) {
-                limitMaxEl.textContent = data.maxLimit;
-            }
-            
-            if (limitBadgeEl && data.type) {
-                limitBadgeEl.textContent = data.type.toUpperCase();
-                
-                // Ubah styling badge secara konsisten
-                if (data.type === 'vip') {
-                    limitBadgeEl.className = "text-[9px] font-bold px-2 py-0.5 mt-1 rounded bg-purple-500/20 text-purple-400 uppercase tracking-widest border border-purple-500/30";
-                } else if (data.type === 'premium') {
-                    limitBadgeEl.className = "text-[9px] font-bold px-2 py-0.5 mt-1 rounded bg-amber-500/20 text-amber-400 uppercase tracking-widest border border-amber-500/30";
-                } else {
-                    limitBadgeEl.className = "text-[9px] font-bold px-2 py-0.5 mt-1 rounded bg-slate-800 text-slate-400 uppercase tracking-widest border border-white/5";
-                }
-            }
-        }
-    } catch (error) {
-        console.error("Gagal memperbarui data limit di UI:", error);
-    }
-}
-
 document.addEventListener('DOMContentLoaded', () => {
     const savedLang = localStorage.getItem('lang') || 'id';
-    const urlParams = new URLSearchParams(window.location.search);
     
     initTheme();
     initDigitalClock();
     initImageLightbox(); 
     setLanguage(savedLang);
-    fetchAndUpdateUserLimit();
+    
     if (typeof initMultiMusicPlayer === 'function') {
         initMultiMusicPlayer();
-    }
-
-    const notifBtn = document.getElementById('notifMenuBtn');
-const notifPopup = document.getElementById('notifPopup');
-const closeNotifBtn = document.getElementById('closeNotifBtn');
-const notifOverlay = document.getElementById('notifOverlay');
-const notifBadge = document.getElementById('notifBadge');
-
-if (notifBtn && notifPopup) {
-    // Buka Notifikasi
-    notifBtn.addEventListener('click', () => {
-        notifPopup.classList.remove('hidden');
-        document.body.classList.add('overflow-hidden');
-
-        // Sembunyikan angka 1 saat ditekan / dibaca
-        if (notifBadge) {
-            notifBadge.classList.add('hidden');
-        }
-    });
-
-    // Tutup Notifikasi via Tombol X
-    if (closeNotifBtn) {
-        closeNotifBtn.addEventListener('click', () => {
-            notifPopup.classList.add('hidden');
-            document.body.classList.remove('overflow-hidden');
-        });
-    }
-
-    // Tutup Notifikasi via Klik Area Gelap Luar
-    if (notifOverlay) {
-        notifOverlay.addEventListener('click', () => {
-            notifPopup.classList.add('hidden');
-            document.body.classList.remove('overflow-hidden');
-        });
-    }
-}
-
-if (urlParams.get('showProfile') === 'true') {
-        if (typeof openProfilePopup === "function") {
-            openProfilePopup();
-        }
-        window.history.replaceState({}, document.title, window.location.pathname);
     }
 
     const uploaderBtn = document.getElementById('uploaderMenuBtn'); 
@@ -1473,8 +1274,6 @@ if (urlParams.get('showProfile') === 'true') {
         .then(data => {
             apiData = data;
             loadApis();
-            fetchAndUpdateUserLimit();
-            
         })
         .catch(err => {
             const apiListEl = document.getElementById('apiList');
