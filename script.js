@@ -1246,7 +1246,6 @@ document.addEventListener('DOMContentLoaded', () => {
         initMultiMusicPlayer();
     }
 
-    const uploaderBtn = document.getElementById('uploaderMenuBtn'); 
     const bioMenuBtn = document.getElementById('bioMenuBtn');
     const bioDropdown = document.getElementById('bioDropdown');
     const closeMenuBtn = document.getElementById('closeMenuBtn');
@@ -1261,12 +1260,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (closeMenuBtn) closeMenuBtn.addEventListener('click', closeSidebarMenu);
         menuOverlay.addEventListener('click', closeSidebarMenu);
         bioDropdown.addEventListener('click', (e) => { e.stopPropagation(); });
-    }
-
-    if (uploaderBtn) {
-        uploaderBtn.addEventListener('click', () => {
-            window.location.href = '/uploader'; 
-        });
     }
     
     fetch('/api/apilist')
