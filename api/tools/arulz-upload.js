@@ -1,22 +1,24 @@
 const express = require("express");
 const multer = require("multer");
 const axios = require("axios");
+const FormData = require("form-data");
 
 const router = express.Router();
 
+// Gunakan MemoryStorage untuk menampung file sementara di buffer
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 4.5 * 1024 * 1024 } // Limit 10MB
+  limits: { fileSize: 10 * 1024 * 1024 } // Limit 10MB
 });
 
 router.post("/", upload.single("file"), async (req, res) => {
-  // Ambil file dari Multer, atau fallback ke express-fileupload (req.files)
+  // Dukungan untuk Multer (req.file) dan express-fileupload (req.files.file)
   const file = req.file || (req.files && req.files.file);
 
   if (!file) {
     return res.status(400).json({ 
       status: false, 
-      message: "File wajib diunggah! Gunakan form key 'file'." 
+      message: "File wajib diunggah! Gunakan field 'file'." 
     });
   }
 
@@ -25,42 +27,29 @@ router.post("/", upload.single("file"), async (req, res) => {
     const fileName = file.originalname || file.name || "file.bin";
     const mimeType = file.mimetype || "application/octet-stream";
 
-    // 1. Ubah file buffer menjadi Base64 string
-    const base64Data = fileBuffer.toString("base64");
-    const base64Content = `data:${mimeType};base64,${base64Data}`;
+    // Siapkan FormData untuk dikirim ke API target
+    const form = new FormData();
+    form.append("file", fileBuffer, {
+      filename: fileName,
+      contentType: mimeType,
+      knownLength: fileBuffer.length
+    });
 
-    // 2. Kirim payload Base64 ke Base Uploader
-    const responseUploader = await axios.post(
-      "https://base-api-arulz-simple.vercel.app/uploader",
-      {
-        file: base64Content,
-        filename: fileName,
-        mimetype: mimeType
+    // Endpoint API Tujuan
+    const targetUrl = "https://base-api-arulz-simple.vercel.app/uploadfile";
+
+    const response = await axios.post(targetUrl, form, {
+      headers: {
+        ...form.getHeaders(),
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
       },
-      {
-        headers: { "Content-Type": "application/json" },
-        timeout: 30000
-      }
-    ).catch(() => null);
+      timeout: 30000
+    });
 
-    // 3. Dapatkan hasil dari endpoint uploadfile
-    const responseResult = await axios.get(
-      "https://base-api-arulz-simple.vercel.app/uploadfile",
-      {
-        file: responseUploader,
-        filename: fileName,
-        mimetype: mimeType
-      },
-      {
-        headers: { "Content-Type": "application/json" },
-        timeout: 30000
-      }
-    ).catch(() => null);
+    let resultData = response.data;
 
-    let resultData = responseResult?.data;
-
-    // Jika balikan berupa template HTML, ekstrak URL-nya
-    if (typeof resultData === "string" && resultData.includes("rawUrl")) {
+    // Parsing HTML jika target mengembalikan elemen HTML dengan tautan download/raw
+    if (typeof resultData === "string") {
       const match = resultData.match(/href="(https?:\/\/[^"]+)"/);
       if (match && match[1]) {
         resultData = { url: match[1] };
@@ -74,7 +63,7 @@ router.post("/", upload.single("file"), async (req, res) => {
     });
 
   } catch (e) {
-    console.error("Base64 Upload Error:", e.message);
+    console.error("Scrape Error:", e.message);
     return res.status(500).json({ 
       status: false, 
       error: e.response?.data || e.message 
