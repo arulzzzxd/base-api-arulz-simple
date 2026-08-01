@@ -311,6 +311,7 @@ function getEndpointsFromRouter(category, file) {
       let params = {}; 
 
       if (layer.route.stack && layer.route.stack.length) {
+        // Loop middleware HANYA untuk mencari parameter
         layer.route.stack.forEach(mw => {
           if (!mw.handle) return;
           const fnString = mw.handle.toString();
@@ -327,29 +328,28 @@ function getEndpointsFromRouter(category, file) {
             params[match[1]] = "";
           });
 
-          [...fnString.matchAll(/req\.files\.([a-zA-Z0-9_]+)/g)].forEach(match => {
-            params[match[1]] = "";
-          });
+          // Deteksi otomatis jika API menggunakan multer (req.file atau req.files)
+          if (fnString.includes('req.file') || fnString.includes('req.files')) {
+            params['file'] = { type: 'file' };
+          }
+        }); // Tutup iterasi layer middleware di sini!
 
-          [...fnString.matchAll(/req\.file\.([a-zA-Z0-9_]+)/g)].forEach(match => {
-            params[match[1]] = "";
-          });
+        // Timpa dan gabungkan jika ada router.paramsConfig eksplist di dalam rute
+        if (route.paramsConfig) {
+          Object.assign(params, route.paramsConfig);
+        }
+
+        // Push data SEKALI saja di luar loop middleware untuk menghindari duplikat
+        endpoints.push({
+          name: `/${category}/${file.replace(/\.js$/, "")}`,
+          path: `/api/${category}/${file.replace(/\.js$/, "")}`,
+          desc: `/${category}/${file.replace(/\.js$/, "")}`,
+          status: route.status || "ready",
+          type: route.type || "free",
+          params,
+          methods
         });
       }
-
-      if (methods.includes("POST") && Object.keys(params).length === 0) {
-        params.file = "file";
-      }
-
-      endpoints.push({
-        name: `/${category}/${file.replace(/\.js$/, "")}`,
-        path: `/api/${category}/${file.replace(/\.js$/, "")}`,
-        desc: `/${category}/${file.replace(/\.js$/, "")}`,
-        status: route.status || "ready",
-        type: route.type || "free",
-        params,
-        methods
-      });
     }
   });
   return endpoints;
