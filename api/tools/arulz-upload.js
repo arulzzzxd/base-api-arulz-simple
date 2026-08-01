@@ -5,48 +5,69 @@ const FormData = require("form-data");
 
 const router = express.Router();
 
+// Gunakan MemoryStorage
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 4.5 * 1024 * 1024 } // Limit 4.5MB
+  limits: { fileSize: 10 * 1024 * 1024 } // 10MB
 });
 
 router.post("/", upload.single("file"), async (req, res) => {
-  const file = req.file;
+  // Ambil file dari Multer, atau fallback ke express-fileupload (req.files) jika Multer dilewati
+  const file = req.file || (req.files && req.files.file);
 
   if (!file) {
-    return res.status(400).json({ error: "File required (use key 'file')" });
+    return res.status(400).json({ 
+      status: false, 
+      message: "File wajib diunggah! Gunakan form key 'file'." 
+    });
   }
 
   try {
+    const fileBuffer = file.buffer || file.data;
+    const fileName = file.originalname || file.name || "uploaded_file.bin";
+    const mimeType = file.mimetype || "application/octet-stream";
+
     const form = new FormData();
-    form.append("file", file.buffer, {
-      filename: file.originalname,
-      contentType: file.mimetype
+    form.append("file", fileBuffer, {
+      filename: fileName,
+      contentType: mimeType,
+      knownLength: fileBuffer.length
     });
 
-    // Request ke endpoint uploader utama
-    const responseUploader = await axios.post(
-      "https://base-api-arulz-simple.vercel.app/uploader",
-      form,
-      { headers: form.getHeaders() }
-    );
+    // Tembak secara langsung ke endpoint backend penerima unggahan file (/uploadfile)
+    // Hindari menembak ke /uploader karena /uploader adalah halaman GET (HTML)
+    const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+    
+    const response = await axios.post(`${baseUrl}/uploadfile`, form, {
+      headers: {
+        ...form.getHeaders()
+      },
+      timeout: 30000
+    });
 
-    // Backup / Fetch ke /uploadfile jika diperlukan
-    const responseResult = await axios.post(
-      "https://base-api-arulz-simple.vercel.app/uploadfile",
-      form,
-      { headers: form.getHeaders() }
-    ).catch(() => null);
+    // Jika response berupa HTML (seperti tampilan unggahan sukses di server)
+    let resultData = response.data;
 
-    const result = responseUploader.data || responseResult?.data;
+    // Ekstrak URL jika response dari /uploadfile mengembalikan HTML
+    if (typeof resultData === "string" && resultData.includes("rawUrl")) {
+      const match = resultData.match(/href="(https?:\/\/[^"]+)"/);
+      if (match && match[1]) {
+        resultData = { url: match[1] };
+      }
+    }
 
-    res.json({
+    return res.json({
       status: true,
       creator: "ArulzXD",
-      result
+      result: resultData
     });
+
   } catch (e) {
-    res.status(500).json({ error: e.response?.data?.message || e.message });
+    console.error("Upload Error:", e.message);
+    return res.status(500).json({ 
+      status: false, 
+      error: e.response?.data || e.message 
+    });
   }
 });
 
