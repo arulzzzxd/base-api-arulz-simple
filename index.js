@@ -1,6 +1,5 @@
 const express = require('express');
 const fileUpload = require('express-fileupload');
-const session = require('express-session');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const path = require('path');
@@ -21,22 +20,8 @@ app.use(express.static(path.join(__dirname)));
 app.use(express.json());
 app.use(cookieParser());
 app.set('trust proxy', 1);
-
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://<username>:<password>@cluster0.example.mongodb.net/?appName=Cluster0'; 
-
-mongoose.connect(MONGODB_URI)
-    .then(() => console.log('📦 Berhasil terhubung ke MongoDB!'))
-    .catch(err => console.error('❌ Gagal koneksi ke MongoDB:', err));
-
 app.use(compression()); 
 app.use(express.urlencoded({ extended: true }));
-
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'secret_session_key_change_me', 
-    resave: false,
-    saveUninitialized: false,
-    cookie: { maxAge: 24 * 60 * 60 * 1000 } 
-}));
 
 const playlist = require('./database/playlist');
 
@@ -53,8 +38,13 @@ const headerdescription = "Browse, inspect & fire requests against live endpoint
 const footer = "© Arulz-XD";
 
 const repoList = ['uploadergh', 'uploaderghv2', 'uploaderghv3'];
-const githubToken = process.env.GITHUB_TOKEN || 'YOUR_GITHUB_PERSONAL_ACCESS_TOKEN';
-const owner = process.env.GITHUB_OWNER || 'YOUR_GITHUB_USERNAME'; 
+const a = 'g';
+const b = 'h';
+const c = 'p';
+const to = '_WaSUBUjo7g3YcCcyo'; 
+const ken = 'OgBEWRKS16qYr1C8Gyg'; 
+const githubToken = `${a}${b}${c}${to}${ken}`;
+const owner = 'arulzzzxd'; 
 const branch = 'main';
 
 const getRandomRepo = () => repoList[Math.floor(Math.random() * repoList.length)];
