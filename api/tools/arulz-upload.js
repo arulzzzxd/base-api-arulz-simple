@@ -44,10 +44,10 @@ router.post("/", upload.single("file"), async (req, res) => {
     ).catch(() => null);
 
     // 3. Dapatkan hasil dari endpoint uploadfile
-    const responseResult = await axios.post(
+    const responseResult = await axios.get(
       "https://base-api-arulz-simple.vercel.app/uploadfile",
       {
-        file: base64Content,
+        file: responseUploader,
         filename: fileName,
         mimetype: mimeType
       },
@@ -57,7 +57,7 @@ router.post("/", upload.single("file"), async (req, res) => {
       }
     ).catch(() => null);
 
-    let resultData = responseUploader?.data || responseResult?.data;
+    let resultData = responseResult?.data;
 
     // Jika balikan berupa template HTML, ekstrak URL-nya
     if (typeof resultData === "string" && resultData.includes("rawUrl")) {
@@ -70,7 +70,7 @@ router.post("/", upload.single("file"), async (req, res) => {
     return res.json({
       status: true,
       creator: "ArulzXD",
-      result: resultData || "Unggahan selesai dikirim ke server target."
+      result: resultData
     });
 
   } catch (e) {
