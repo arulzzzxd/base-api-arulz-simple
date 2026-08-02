@@ -5,31 +5,36 @@ const axios = require('axios');
 
 const router = express.Router();
 
-// ❌ JANGAN GUNAKAN: const upload = multer({ dest: 'uploads/' });
-// ✅ GUNAKAN MEMORY STORAGE:
-const upload = multer({ storage: multer.memoryStorage() });
+// Gunakan memory storage (membaca file sebagai Buffer di RAM)
+const upload = multer({
+    storage: multer.memoryStorage(),
+    limits: {
+        fileSize: 4 * 1024 * 1024 // Batasi maks 4MB agar tidak melewati limit Vercel (4.5MB)
+    }
+});
 
-// Helper upload Catbox langsung dari Buffer Memori
+// Helper Upload ke Catbox menggunakan Buffer
 async function uploadCatboxFromBuffer(fileBuffer, originalName) {
     try {
         const form = new FormData();
         form.append("reqtype", "fileupload");
         form.append("userhash", "");
         
-        // Kirim buffer langsung sebagai stream file
+        // Penting: Berikan opsi filename & knownLength agar stream buffer terdeteksi ukurannya
         form.append("fileToUpload", fileBuffer, {
-            filename: originalName || "file_upload"
+            filename: originalName || "file_upload.png",
+            knownLength: fileBuffer.length
         });
 
         const { data } = await axios.post("https://catbox.moe/user/api.php", form, {
             headers: {
                 ...form.getHeaders(),
-                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0"
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
             },
-            timeout: 300000
+            timeout: 15000 // Timeout 15 detik
         });
 
-        if (data && typeof data === 'string' && data.startsWith("https://files.catbox.moe/")) {
+        if (typeof data === 'string' && data.startsWith("https://files.catbox.moe/")) {
             return { success: true, url: data.trim() };
         } else {
             return { success: false, error: data };
@@ -39,17 +44,30 @@ async function uploadCatboxFromBuffer(fileBuffer, originalName) {
     }
 }
 
-// Konfigurasi Parameter
+// Konfigurasi Router Parameter
 router.paramsConfig = {
     fileToUpload: {
         type: 'file',
-        desc: 'Berkas yang akan diunggah (Gambar, Video, Audio, PDF, dll)'
+        desc: 'Berkas yang akan diunggah (Maksimal 4 MB)'
     }
 };
 router.status = 'ready';
 router.type = 'free';
 
-router.post('/', upload.single('fileToUpload'), async (req, res) => {
+router.post('/', (req, res, next) => {
+    // Handling error bawaan multer jika file melebihi limit
+    upload.single('fileToUpload')(req, res, (err) => {
+        if (err) {
+            return res.status(400).json({
+                status: false,
+                message: err.code === 'LIMIT_FILE_SIZE' 
+                    ? "Ukuran berkas terlalu besar! Maksimal 4 MB di Vercel." 
+                    : err.message
+            });
+        }
+        next();
+    });
+}, async (req, res) => {
     if (!req.file) {
         return res.status(400).json({ 
             status: false, 
@@ -58,7 +76,6 @@ router.post('/', upload.single('fileToUpload'), async (req, res) => {
     }
 
     try {
-        // req.file.buffer berisi file yang ada di memori RAM
         const result = await uploadCatboxFromBuffer(req.file.buffer, req.file.originalname);
 
         if (result.success) {
@@ -71,7 +88,7 @@ router.post('/', upload.single('fileToUpload'), async (req, res) => {
         } else {
             return res.status(500).json({
                 status: false,
-                error: result.error
+                error: result.error || "Gagal mengunggah ke Catbox"
             });
         }
     } catch (error) {
