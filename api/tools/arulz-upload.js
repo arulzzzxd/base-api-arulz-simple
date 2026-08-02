@@ -1,77 +1,100 @@
-const express = require("express");
-const multer = require("multer");
-const axios = require("axios");
-const FormData = require("form-data");
-const { Readable } = require("stream");
+const express = require('express');
+const multer = require('multer');
+const FormData = require('form-data');
+const axios = require('axios');
+const fs = require('fs');
 
 const router = express.Router();
+const upload = multer({ dest: 'uploads/' });
 
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 200 * 1024 * 1024 }
-});
+// ==========================================
+// 1. SCRAPER / HELPER CATBOX (DIBUAT SATU FILE)
+// ==========================================
+async function uploadCatbox(filePath) {
+    try {
+        if (!fs.existsSync(filePath)) {
+            return { success: false, error: "File not found" };
+        }
 
+        const form = new FormData();
+        form.append("reqtype", "fileupload");
+        form.append("userhash", "");
+        form.append("fileToUpload", fs.createReadStream(filePath));
+
+        const { data } = await axios.post("https://catbox.moe/user/api.php", form, {
+            headers: {
+                ...form.getHeaders(),
+                "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0"
+            },
+            timeout: 300000
+        });
+
+        if (data && typeof data === 'string' && data.startsWith("https://files.catbox.moe/")) {
+            return { success: true, url: data.trim() };
+        } else {
+            return { success: false, error: data };
+        }
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+}
+
+// ==========================================
+// 2. CONFIG & ROUTE ENDPOINT
+// ==========================================
 router.paramsConfig = {
-  file: { type: 'file' }
+    fileToUpload: {
+        type: 'file',
+        desc: 'Berkas yang akan diunggah (Gambar, Video, Audio, PDF, dll)'
+    }
 };
+router.status = 'ready';
+router.type = 'free';
 
-router.post("/", upload.single("file"), async (req, res) => {
-  const file = req.file || (req.files && req.files.file);
-
-  if (!file) {
-    return res.status(400).json({ 
-      status: false, 
-      message: "File wajib diunggah! Gunakan form key 'file'." 
-    });
-  }
-
-  try {
-    const fileBuffer = file.buffer || file.data;
-    const fileName = file.originalname || file.name || "uploaded_file.bin";
-
-    // Konversi Buffer ke Stream agar FormData tidak crash
-    const stream = Readable.from(fileBuffer);
-
-    const form = new FormData();
-    form.append("reqtype", "fileupload");
-    form.append("userhash", "");
-    form.append("fileToUpload", stream, {
-      filename: fileName
-    });
-
-    const { data } = await axios.post("https://catbox.moe/user/api.php", form, {
-      headers: {
-        ...form.getHeaders(),
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
-      },
-      maxContentLength: Infinity,
-      maxBodyLength: Infinity,
-      timeout: 300000 
-    });
-
-    if (typeof data === "string" && data.startsWith("https://files.catbox.moe/")) {
-      return res.json({
-        status: true,
-        creator: "ArulzXD",
-        result: { url: data.trim() }
-      });
-    } else {
-      return res.status(500).json({ 
-        status: false, 
-        error: typeof data === 'object' ? JSON.stringify(data) : data 
-      });
+router.post('/', upload.single('fileToUpload'), async (req, res) => {
+    if (!req.file) {
+        return res.status(400).json({ 
+            status: false, 
+            message: "Berkas 'fileToUpload' wajib diunggah!" 
+        });
     }
 
-  } catch (e) {
-    console.error("Catbox Upload Error Log:", e.response?.data || e.message);
-    return res.status(500).json({ 
-      status: false, 
-      error: e.response?.data || e.message 
-    });
-  }
+    const tempFilePath = req.file.path;
+
+    try {
+        // Panggil fungsi scraper lokal
+        const result = await uploadCatbox(tempFilePath);
+
+        // Hapus file temporary lokal setelah upload selesai
+        if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+        }
+
+        if (result.success) {
+            return res.json({
+                status: true,
+                result: {
+                    url: result.url
+                }
+            });
+        } else {
+            return res.status(500).json({
+                status: false,
+                error: result.error
+            });
+        }
+    } catch (error) {
+        // Pastikan file temporary tetap terhapus jika runtime error
+        if (fs.existsSync(tempFilePath)) {
+            fs.unlinkSync(tempFilePath);
+        }
+        return res.status(500).json({ 
+            status: false, 
+            error: error.message 
+        });
+    }
 });
 
-router.status = "ready";
+router.status = "ready"; 
 router.type = "free";
-
 module.exports = router;
