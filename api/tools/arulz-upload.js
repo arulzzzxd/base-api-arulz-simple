@@ -2,24 +2,24 @@ const express = require('express');
 const multer = require('multer');
 const FormData = require('form-data');
 const axios = require('axios');
-const fs = require('fs');
 
 const router = express.Router();
-const upload = multer({ dest: 'uploads/' });
 
-// ==========================================
-// 1. SCRAPER / HELPER CATBOX (DIBUAT SATU FILE)
-// ==========================================
-async function uploadCatbox(filePath) {
+// ❌ JANGAN GUNAKAN: const upload = multer({ dest: 'uploads/' });
+// ✅ GUNAKAN MEMORY STORAGE:
+const upload = multer({ storage: multer.memoryStorage() });
+
+// Helper upload Catbox langsung dari Buffer Memori
+async function uploadCatboxFromBuffer(fileBuffer, originalName) {
     try {
-        if (!fs.existsSync(filePath)) {
-            return { success: false, error: "File not found" };
-        }
-
         const form = new FormData();
         form.append("reqtype", "fileupload");
         form.append("userhash", "");
-        form.append("fileToUpload", fs.createReadStream(filePath));
+        
+        // Kirim buffer langsung sebagai stream file
+        form.append("fileToUpload", fileBuffer, {
+            filename: originalName || "file_upload"
+        });
 
         const { data } = await axios.post("https://catbox.moe/user/api.php", form, {
             headers: {
@@ -39,9 +39,7 @@ async function uploadCatbox(filePath) {
     }
 }
 
-// ==========================================
-// 2. CONFIG & ROUTE ENDPOINT
-// ==========================================
+// Konfigurasi Parameter
 router.paramsConfig = {
     fileToUpload: {
         type: 'file',
@@ -59,16 +57,9 @@ router.post('/', upload.single('fileToUpload'), async (req, res) => {
         });
     }
 
-    const tempFilePath = req.file.path;
-
     try {
-        // Panggil fungsi scraper lokal
-        const result = await uploadCatbox(tempFilePath);
-
-        // Hapus file temporary lokal setelah upload selesai
-        if (fs.existsSync(tempFilePath)) {
-            fs.unlinkSync(tempFilePath);
-        }
+        // req.file.buffer berisi file yang ada di memori RAM
+        const result = await uploadCatboxFromBuffer(req.file.buffer, req.file.originalname);
 
         if (result.success) {
             return res.json({
@@ -84,10 +75,6 @@ router.post('/', upload.single('fileToUpload'), async (req, res) => {
             });
         }
     } catch (error) {
-        // Pastikan file temporary tetap terhapus jika runtime error
-        if (fs.existsSync(tempFilePath)) {
-            fs.unlinkSync(tempFilePath);
-        }
         return res.status(500).json({ 
             status: false, 
             error: error.message 
@@ -95,6 +82,4 @@ router.post('/', upload.single('fileToUpload'), async (req, res) => {
     }
 });
 
-router.status = "ready"; 
-router.type = "free";
 module.exports = router;
