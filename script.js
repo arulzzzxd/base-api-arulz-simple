@@ -326,17 +326,7 @@ function updateLivePreview(catIdx, epIdx, method, basePath, endpointType) {
     const formData = new FormData(form);
     const params = new URLSearchParams();
 
-    let formHasFile = false;
-    form.querySelectorAll('input[type="file"]').forEach(fileInput => {
-        if (fileInput.files.length > 0) {
-            formHasFile = true;
-        }
-    });
-
     let finalMethod = method.toUpperCase();
-    if (formHasFile) {
-        finalMethod = 'POST';
-    }
 
     if (finalMethod === 'GET' || finalMethod === 'DELETE') {
         for (const [key, value] of formData.entries()) {
@@ -358,28 +348,14 @@ function updateLivePreview(catIdx, epIdx, method, basePath, endpointType) {
         if (finalMethod === 'GET' || finalMethod === 'DELETE') {
             curlContainer.textContent = `curl -X ${finalMethod} "${finalUrl}"`;
         } else {
-            if (formHasFile) {
-                const bodyParams = [];
-                for (const [key, value] of formData.entries()) {
-                    if (value instanceof File) {
-                        const fileName = value.name ? value.name : 'file.bin';
-                        bodyParams.push(`-F "${key}=@${fileName}"`);
-                    } else if (value) {
-                        bodyParams.push(`-F "${key}=${value}"`);
-                    }
+            const bodyParams = [];
+            for (const [key, value] of formData.entries()) {
+                if (value && typeof value === 'string') {
+                    bodyParams.push(`"${key}": "${value}"`);
                 }
-                const dataString = bodyParams.length ? ` ${bodyParams.join(' ')}` : '';
-                curlContainer.textContent = `curl -X ${finalMethod} "${finalUrl}"${dataString}`;
-            } else {
-                const bodyParams = [];
-                for (const [key, value] of formData.entries()) {
-                    if (value && typeof value === 'string') {
-                        bodyParams.push(`"${key}": "${value}"`);
-                    }
-                }
-                const dataString = bodyParams.length ? ` -H "Content-Type: application/json" -d '{${bodyParams.join(', ')}}'` : '';
-                curlContainer.textContent = `curl -X ${finalMethod} "${finalUrl}"${dataString}`;
             }
+            const dataString = bodyParams.length ? ` -H "Content-Type: application/json" -d '{${bodyParams.join(', ')}}'` : '';
+            curlContainer.textContent = `curl -X ${finalMethod} "${finalUrl}"${dataString}`;
         }
     }
 }
@@ -438,18 +414,7 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
     const rawFormData = new FormData(form);
     const queryParams = new URLSearchParams();
 
-    let formHasFile = false;
-    form.querySelectorAll('input[type="file"]').forEach(fileInput => {
-        if (fileInput.files.length > 0) {
-            formHasFile = true;
-        }
-    });
-
     let finalMethod = method.toUpperCase();
-    if (formHasFile) {
-        finalMethod = 'POST';
-    }
-
     let fetchOptions = { method: finalMethod };
     let fullPath = `${BASE_URL}${path.split('?')[0]}`;
     let isMedia = false;
@@ -464,7 +429,17 @@ async function executeRequest(e, catIdx, epIdx, method, path, endpointType) {
             const qStr = queryParams.toString();
             if (qStr) fullPath += '?' + qStr;
         } else {
-            if (formHasFile) {
+            // Cek apakah form memiliki input file yang terisi
+            let hasFile = false;
+            for (const [key, value] of rawFormData.entries()) {
+                if (value instanceof File && value.name !== "") {
+                    hasFile = true;
+                    break;
+                }
+            }
+
+            if (hasFile) {
+                // Jangan atur Content-Type header secara manual agar browser mengatur boundary multipart/form-data
                 fetchOptions.body = rawFormData;
             } else {
                 fetchOptions.headers = { 'Content-Type': 'application/json' };
@@ -935,20 +910,19 @@ function loadApis() {
                                 <span class="text-[10px] text-slate-500 light-mode:text-slate-400 italic font-normal">${paramDesc}</span>
                             </div>`;
 
-                        if (pType === 'file' || paramName === 'file') {
-                            html += `<input type="file" name="${paramName}" onchange="updateLivePreview(${catIdx}, ${epIdx}, '${method}', '${path}', '${epType}')" class="w-full px-3 py-2 rounded-lg bg-black/40 light-mode:bg-white border border-white/10 light-mode:border-slate-300 text-white light-mode:text-slate-900 focus:outline-none focus:border-cyan-500 text-xs file:mr-3 file:py-1 file:px-2.5 file:rounded file:border-0 file:text-xs file:font-semibold file:bg-cyan-500/10 file:text-cyan-400 hover:file:bg-cyan-500/20" ${isRequired ? 'required' : ''}>`;
-                        } 
-                        else if (pType && pType.type === 'select' && Array.isArray(pType.options)) {
-                            html += `<select name="${paramName}" onchange="updateLivePreview(${catIdx}, ${epIdx}, '${method}', '${path}', '${epType}')" class="w-full px-3 py-2 rounded-lg bg-black/40 light-mode:bg-white border border-white/10 light-mode:border-slate-300 text-cyan-400 light-mode:text-slate-900 focus:outline-none focus:border-cyan-500 code-font text-sm">`;
-                            pType.options.forEach(opt => {
-                                html += `<option value="${opt}" class="bg-slate-900 text-white">${opt}</option>`;
-                            });
-                            html += `</select>`;
-                        } 
-                        else {
-                            html += `<input type="text" name="${paramName}" value="" oninput="updateLivePreview(${catIdx}, ${epIdx}, '${method}', '${path}', '${epType}')" class="w-full px-3 py-2 rounded-lg bg-black/40 light-mode:bg-white border border-white/10 light-mode:border-slate-300 text-white light-mode:text-slate-900 focus:outline-none focus:border-cyan-500 code-font text-sm" placeholder="${inputPlaceholder}" ${isRequired ? 'required' : ''}>`;
-                        }
-
+                        if (pType && pType.type === 'select' && Array.isArray(pType.options)) {
+    html += `<select name="${paramName}" onchange="updateLivePreview(${catIdx}, ${epIdx}, '${method}', '${path}', '${epType}')" class="w-full px-3 py-2 rounded-lg bg-black/40 light-mode:bg-white border border-white/10 light-mode:border-slate-300 text-cyan-400 light-mode:text-slate-900 focus:outline-none focus:border-cyan-500 code-font text-sm">`;
+    pType.options.forEach(opt => {
+        html += `<option value="${opt}" class="bg-slate-900 text-white">${opt}</option>`;
+    });
+    html += `</select>`;
+} 
+else if (pType && pType.type === 'file') {
+    html += `<input type="file" name="${paramName}" onchange="updateLivePreview(${catIdx}, ${epIdx}, '${method}', '${path}', '${epType}')" class="w-full px-3 py-2 rounded-lg bg-black/40 light-mode:bg-white border border-white/10 light-mode:border-slate-300 text-white light-mode:text-slate-900 focus:outline-none focus:border-cyan-500 code-font text-sm cursor-pointer" ${isRequired ? 'required' : ''}>`;
+}
+else {
+    html += `<input type="text" name="${paramName}" value="" oninput="updateLivePreview(${catIdx}, ${epIdx}, '${method}', '${path}', '${epType}')" class="w-full px-3 py-2 rounded-lg bg-black/40 light-mode:bg-white border border-white/10 light-mode:border-slate-300 text-white light-mode:text-slate-900 focus:outline-none focus:border-cyan-500 code-font text-sm" placeholder="${inputPlaceholder}" ${isRequired ? 'required' : ''}>`;
+}
                         html += `</div>`;
                     });
                 }

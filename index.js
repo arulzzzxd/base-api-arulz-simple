@@ -1,6 +1,5 @@
 const express = require('express');
 const session = require('express-session');
-const fileUpload = require('express-fileupload');
 const rateLimit = require('express-rate-limit');
 const cookieParser = require('cookie-parser');
 const path = require('path');
@@ -22,6 +21,12 @@ app.use(express.json());
 app.use(cookieParser());
 app.set('trust proxy', 1);
 
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://<username>:<password>@cluster0.example.mongodb.net/?appName=Cluster0'; 
+
+mongoose.connect(MONGODB_URI)
+    .then(() => console.log('📦 Berhasil terhubung ke MongoDB!'))
+    .catch(err => console.error('❌ Gagal koneksi ke MongoDB:', err));
+
 app.use(compression()); 
 app.use(express.urlencoded({ extended: true }));
 
@@ -31,7 +36,6 @@ app.use(session({
     saveUninitialized: false,
     cookie: { maxAge: 24 * 60 * 60 * 1000 } 
 }));
-const fileUpload = require('express-fileupload');
 
 const playlist = require('./database/playlist');
 
@@ -41,6 +45,13 @@ const logo = "https://arulz-xd.my.id/files/33s7XJ.png";
 const headertitle = `<img src="https://readme-typing-svg.demolab.com?font=Poppins&weight=700&size=28&pause=1000&color=00D4FF&center=true&vCenter=true&width=600&lines=Welcome+To+ArulzXD+API;Fast+%F0%9F%9A%80+Reliable+%E2%9A%A1;Free+REST+API+Services;Developer+Friendly+API" alt="Typing SVG" class="mx-auto" />`;
 const headerdescription = "Browse, inspect & fire requests against live endpoints._";
 const footer = "© Arulz-XD";
+
+const repoList = ['uploadergh', 'uploaderghv2', 'uploaderghv3'];
+const githubToken = process.env.GITHUB_TOKEN || 'YOUR_GITHUB_PERSONAL_ACCESS_TOKEN';
+const owner = process.env.GITHUB_OWNER || 'YOUR_GITHUB_USERNAME'; 
+const branch = 'main';
+
+const getRandomRepo = () => repoList[Math.floor(Math.random() * repoList.length)];
 
 app.post('/api/feedback', async (req, res) => {
     const email = req.body.email;     
@@ -306,46 +317,35 @@ function getEndpointsFromRouter(category, file) {
       const methods = Object.keys(layer.route.methods).map(m => m.toUpperCase());
       let params = {}; 
 
-      if (layer.route.stack && layer.route.stack.length) {
-        // Loop middleware HANYA untuk mencari parameter
+      // 1. Prioritaskan konfigurasi paramsConfig yang ada di file router
+      if (route.paramsConfig) {
+        params = route.paramsConfig;
+      } 
+      // 2. Jika tidak ada paramsConfig, fallback ke pencarian regex req.query & req.body
+      else if (layer.route.stack && layer.route.stack.length) {
         layer.route.stack.forEach(mw => {
           if (!mw.handle) return;
           const fnString = mw.handle.toString();
 
           [...fnString.matchAll(/req\.query\.([a-zA-Z0-9_]+)/g)].forEach(match => {
-            if (route.paramsConfig && route.paramsConfig[match[1]]) {
-              params[match[1]] = route.paramsConfig[match[1]];
-            } else {
-              params[match[1]] = "";
-            }
+             params[match[1]] = "";
           });
 
           [...fnString.matchAll(/req\.body\.([a-zA-Z0-9_]+)/g)].forEach(match => {
             params[match[1]] = "";
           });
-
-          // Deteksi otomatis jika API menggunakan multer (req.file atau req.files)
-          if (fnString.includes('req.file') || fnString.includes('req.files')) {
-            params['file'] = { type: 'file' };
-          }
-        }); // Tutup iterasi layer middleware di sini!
-
-        // Timpa dan gabungkan jika ada router.paramsConfig eksplist di dalam rute
-        if (route.paramsConfig) {
-          Object.assign(params, route.paramsConfig);
-        }
-
-        // Push data SEKALI saja di luar loop middleware untuk menghindari duplikat
-        endpoints.push({
-          name: `/${category}/${file.replace(/\.js$/, "")}`,
-          path: `/api/${category}/${file.replace(/\.js$/, "")}`,
-          desc: `/${category}/${file.replace(/\.js$/, "")}`,
-          status: route.status || "ready",
-          type: route.type || "free",
-          params,
-          methods
         });
       }
+
+      endpoints.push({
+        name: `/${category}/${file.replace(/\.js$/, "")}`,
+        path: `/api/${category}/${file.replace(/\.js$/, "")}`,
+        desc: `/${category}/${file.replace(/\.js$/, "")}`,
+        status: route.status || "ready",
+        type: route.type || "free",
+        params,
+        methods
+      });
     }
   });
   return endpoints;
@@ -409,7 +409,7 @@ app.get('/api/server-status', (req, res) => {
         loadAverage: loadAvg
     });
 });
-app.use(fileUpload());
+
 app.use('/api', router);
 
 app.get('/script.js', (req, res) => {
