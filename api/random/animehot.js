@@ -2,33 +2,27 @@ const axios = require('axios');
 const express = require('express');
 const router = express.Router();
 
-const BASE_URL = 'https://arulz-xd.my.id/api/random/animehot';
-const API_KEY = 'arulz-vip-123'; // Apikey otomatis internal
+// API Key Otomatis
+const API_KEY = 'arulz-vip-123';
 
-async function getAnimeHot(apikey) {
-    if (!apikey) {
-        throw new Error('API Key wajib diisi!');
-    }
-
+/**
+ * Mengambil buffer gambar animehot dari API
+ * @returns {Promise<Buffer>}
+ */
+async function fetchAnimeHot() {
     try {
-        const response = await axios.get(BASE_URL, {
-            params: { apikey },
-            headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-            },
+        const response = await axios.get('https://arulz-xd.my.id/api/random/animehot', {
+            params: { apikey: API_KEY },
             responseType: 'arraybuffer',
             timeout: 10000
         });
 
-        const contentType = response.headers['content-type'] || 'image/jpeg';
-        const buffer = Buffer.from(response.data);
-
-        return { buffer, contentType };
+        return Buffer.from(response.data);
     } catch (error) {
         if (error.response && error.response.data) {
             try {
                 const errJson = JSON.parse(error.response.data.toString('utf-8'));
-                throw new Error(errJson.message || 'Gagal mengambil gambar animehot.');
+                throw new Error(errJson.message || 'Gagal mengambil gambar.');
             } catch (e) {
                 throw new Error(`HTTP Error ${error.response.status}: ${error.message}`);
             }
@@ -40,22 +34,16 @@ async function getAnimeHot(apikey) {
 // Endpoint utama Router
 router.get('/', async (req, res) => {
     try {
-        const { buffer, contentType } = await getAnimeHot(API_KEY);
-
+        const imageBuffer = await fetchAnimeHot();
         res.writeHead(200, {
-            'Content-Type': contentType,
-            'Content-Length': buffer.length,
-            'Cache-Control': 'public, max-age=3600'
+            'Content-Type': 'image/jpeg',
+            'Content-Length': imageBuffer.length,
         });
-        res.end(buffer);
+        res.end(imageBuffer);
     } catch (error) {
-        return res.status(500).json({ 
-            status: false,
-            error: error.message 
-        });
+        return res.status(500).json({ status: false, error: error.message });
     }
 });
 
 router.status = "ready"; 
-router.type = "free";
 module.exports = router;
