@@ -4,7 +4,7 @@ const axios = require('axios');
 
 // Konfigurasi Endpoint & API Key Internal
 const TARGET_URL = 'https://arulz-xd.my.id/api/random/animehot';
-const API_KEY = 'arulzfree-5c20ce39'; // Apikey VIP internal
+const API_KEY = 'arulzfree-5c20ce39'; 
 
 /**
  * Mengambil buffer gambar dari domain arulz-xd.my.id
@@ -12,13 +12,18 @@ const API_KEY = 'arulzfree-5c20ce39'; // Apikey VIP internal
 async function fetchAnimeHot() {
     try {
         const response = await axios.get(TARGET_URL, {
-            params: { apikey: API_KEY },
+            params: { 
+                apikey: API_KEY,
+                _t: Date.now() // Cache-busting parameter agar request selalu unik
+            },
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8'
+                'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache'
             },
             responseType: 'arraybuffer',
-            timeout: 15000 // Timeout 15 detik untuk server Vercel
+            timeout: 15000 
         });
 
         const contentType = response.headers['content-type'] || 'image/jpeg';
@@ -26,7 +31,6 @@ async function fetchAnimeHot() {
 
         return { buffer, contentType };
     } catch (error) {
-        // Tangkap respon jika server tujuan mengembalikan Error JSON (misal API key invalid / habis limit)
         if (error.response && error.response.data) {
             try {
                 const errJson = JSON.parse(error.response.data.toString('utf-8'));
@@ -44,10 +48,13 @@ router.get('/', async (req, res) => {
     try {
         const { buffer, contentType } = await fetchAnimeHot();
 
+        // Matikan caching di tingkat client/browser agar tiap kali di-refresh gambar berubah
         res.writeHead(200, {
             'Content-Type': contentType,
             'Content-Length': buffer.length,
-            'Cache-Control': 'public, max-age=3600'
+            'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+            'Pragma': 'no-cache',
+            'Expires': '0'
         });
         res.end(buffer);
     } catch (error) {
