@@ -4,7 +4,7 @@ const axios = require('axios');
 
 // Konfigurasi Endpoint & API Key Internal
 const TARGET_URL = 'https://arulz-xd.my.id/api/random/animehot';
-const API_KEY = 'supportarulzxdprem-3d2e3f'; 
+const API_KEY = 'supportarulzxd-custom-vip'; 
 
 /**
  * Mengambil buffer gambar dari domain arulz-xd.my.id
