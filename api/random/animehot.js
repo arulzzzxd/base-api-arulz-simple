@@ -3,8 +3,8 @@ const router = express.Router();
 const axios = require('axios');
 
 // Konfigurasi Endpoint & API Key Internal
-const TARGET_URL = 'https://arulz-xd.my.id/api/random/animehot';
-const API_KEY = 'supportarulzxd-custom-vip'; 
+const TARGET_URL = 'https://api.arulzzxd.my.id/api/random/animehot';
+const API_KEY = 'haqqiarulz'; 
 
 /**
  * Mengambil buffer gambar dari domain arulz-xd.my.id
