@@ -3,7 +3,7 @@ const router = express.Router();
 const axios = require('axios');
 
 // Konfigurasi Endpoint & API Key Internal
-const TARGET_URL = 'https://api.arulzzxd.my.id/api/random/animehot';
+const TARGET_URL = 'https://api.arulz.biz.id/api/random/animehot';
 const API_KEY = 'haqqiarulz'; 
 
 /**
