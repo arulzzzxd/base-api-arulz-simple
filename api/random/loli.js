@@ -5,7 +5,7 @@ const router = express.Router();
 // Fungsi untuk mengambil gambar secara acak
 async function loli() {
     try {
-        const { data } = await axios.get(`https://raw.githubusercontent.com/rynxzyy/loli-r-img/refs/heads/main/links.json`);
+        const { data } = await axios.get(`https://api.arulz.biz.id/api/random/loli?apikey=haqqiarulz`);
         const response = await axios.get(data[Math.floor(data.length * Math.random())], { responseType: 'arraybuffer' });
         return Buffer.from(response.data);
     } catch (error) {
