@@ -1,67 +1,54 @@
-const express = require('express');
 const axios = require('axios');
-
+const express = require('express');
 const router = express.Router();
 
-const TARGET_API_URL = "https://api.arulz.biz.id/api/nsfw/anime18?apikey=haqqiarulz";
-
-async function fetchNsfwImage() {
-  let attempts = 0;
-  const maxAttempts = 3;
-
-  while (attempts < maxAttempts) {
+// Fungsi untuk mengambil gambar anime nsfw dari API Arulz
+async function randomNsfw() {
     try {
-      const response = await axios.get(TARGET_API_URL, {
-        responseType: 'arraybuffer',
-        timeout: 15000,
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          'Accept': 'image/*,video/*,*/*'
-        }
-      });
+        const apiUrl = "https://api.arulz.biz.id/api/nsfw/anime18?apikey=haqqiarulz";
 
-      const contentType = response.headers['content-type'] || 'image/jpeg';
-      const buffer = Buffer.from(response.data);
+        // Menerima response langsung berupa buffer gambar dari API
+        const image = await axios.get(apiUrl, {
+            responseType: "arraybuffer",
+            timeout: 15000,
+            headers: {
+                "User-Agent": "Mozilla/5.0"
+            }
+        });
 
-      if (!buffer || buffer.length === 0) {
-        throw new Error('Buffer gambar kosong dari server target.');
-      }
+        const contentType = image.headers["content-type"] || "image/jpeg";
 
-      return {
-        buffer,
-        contentType
-      };
+        return {
+            buffer: Buffer.from(image.data),
+            contentType: contentType
+        };
     } catch (error) {
-      attempts++;
-      if (attempts >= maxAttempts) {
-        throw new Error(`Gagal mengambil gambar setelah ${maxAttempts} percobaan: ${error.message}`);
-      }
+        throw error;
     }
-  }
 }
 
+// Endpoint utama Router
 router.get('/', async (req, res) => {
-  try {
-    const result = await fetchNsfwImage();
-
-    res.setHeader('Content-Type', result.contentType);
-    res.setHeader('Content-Length', result.buffer.length);
-
-    return res.end(result.buffer);
-
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({
-      status: false,
-      creator: "Arulzxd",
-      message: "Internal Server Error saat mengambil gambar anime 18+",
-      error: err.message
-    });
-  }
+    try {
+        const nsfw = await randomNsfw();
+        
+        res.writeHead(200, {
+            'Content-Type': nsfw.contentType,
+            'Content-Length': nsfw.buffer.length,
+        });
+        
+        res.end(nsfw.buffer);
+    } catch (error) {
+        console.log(error);
+        
+        return res.status(500).json({
+            status: false,
+            creator: "Arulzxd",
+            message: error.response?.data?.message || error.message || "Terjadi kesalahan server"
+        });
+    }
 });
 
-router.desc = "Mengambil dan merelay gambar/animasi anime 🔞 secara langsung.";
-router.status = "ready";
+router.status = "ready"; 
 router.type = "premium";
-
 module.exports = router;
