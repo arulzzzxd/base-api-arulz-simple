@@ -1,72 +1,67 @@
-const axios = require('axios');
 const express = require('express');
+const axios = require('axios');
+
 const router = express.Router();
 
-// Fungsi untuk mengambil gambar anime nsfw secara acak
-async function randomNsfw() {
+const TARGET_API_URL = "https://api.arulz.biz.id/api/nsfw/anime18?apikey=haqqiarulz";
+
+async function fetchNsfwImage() {
+  let attempts = 0;
+  const maxAttempts = 3;
+
+  while (attempts < maxAttempts) {
     try {
-        // Request API waifu.im dengan tanda asli (timeout & headers)
-        const api = await axios.get("https://api.waifu.im/images?isnsfw=true", {
-            headers: {
-                "User-Agent": "Mozilla/5.0",
-                "Accept": "application/json"
-            },
-            timeout: 10000
-        });
-
-        const data = api.data;
-
-        // Validasi data asli tetap dipertahankan
-        if (!data || !data.items || !Array.isArray(data.items) || !data.items[0]) {
-            throw new Error("Gagal mengambil gambar nsfw");
+      const response = await axios.get(TARGET_API_URL, {
+        responseType: 'arraybuffer',
+        timeout: 15000,
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'image/*,video/*,*/*'
         }
+      });
 
-        const imageUrl = data.items[0].url;
+      const contentType = response.headers['content-type'] || 'image/jpeg';
+      const buffer = Buffer.from(response.data);
 
-        // Download image dengan responseType arraybuffer asli
-        const image = await axios.get(imageUrl, {
-            responseType: "arraybuffer",
-            timeout: 15000,
-            headers: {
-                "User-Agent": "Mozilla/5.0"
-            }
-        });
+      if (!buffer || buffer.length === 0) {
+        throw new Error('Buffer gambar kosong dari server target.');
+      }
 
-        const contentType = image.headers["content-type"] || "image/png";
-
-        // Mengembalikan Buffer dan Content-Type secara dinamis agar tanda tidak hilang
-        return {
-            buffer: Buffer.from(image.data),
-            contentType: contentType
-        };
+      return {
+        buffer,
+        contentType
+      };
     } catch (error) {
-        throw error;
+      attempts++;
+      if (attempts >= maxAttempts) {
+        throw new Error(`Gagal mengambil gambar setelah ${maxAttempts} percobaan: ${error.message}`);
+      }
     }
+  }
 }
 
-// Endpoint utama Router
 router.get('/', async (req, res) => {
-    try {
-        const nsfw = await randomNsfw();
-        
-        res.writeHead(200, {
-            'Content-Type': nsfw.contentType,
-            'Content-Length': nsfw.buffer.length,
-        });
-        
-        res.end(nsfw.buffer);
-    } catch (error) {
-        console.log(error);
-        
-        // Response error dengan format JSON & data creator bawaanmu
-        return res.status(500).json({
-            status: false,
-            creator: "Arulzxd",
-            message: error.response?.data?.detail || error.message || "Terjadi kesalahan server"
-        });
-    }
+  try {
+    const result = await fetchNsfwImage();
+
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Length', result.buffer.length);
+
+    return res.end(result.buffer);
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({
+      status: false,
+      creator: "Arulzxd",
+      message: "Internal Server Error saat mengambil gambar anime 18+",
+      error: err.message
+    });
+  }
 });
 
-router.status = "ready"; 
+router.desc = "Mengambil dan merelay gambar/animasi anime 🔞 secara langsung.";
+router.status = "ready";
 router.type = "premium";
+
 module.exports = router;
